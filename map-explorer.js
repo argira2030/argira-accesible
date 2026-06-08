@@ -1,0 +1,840 @@
+// ================================================================
+//  ARGIRA · MAP EXPLORER · map-explorer.js
+//  FASE 1 — Modal accesible al hacer doble click/tap en un punto
+//  del mapa perceptual.
+//
+//  REQUISITOS:
+//    - NO modifica lógica de audio, sonificación, ArgiraSpeech,
+//      ni el test auditivo existente.
+//    - Reutiliza OBRAS[], ArgiraSpeech, imágenes y audios existentes.
+//    - Modal accesible: role="dialog", aria-modal, focus trap, ESC.
+//    - Funciona en desktop (dblclick) y móvil (doble tap).
+//
+//  DEPENDENCIAS (ya presentes en la página):
+//    - window.ArgiraSpeech
+//    - const CATALOGUE (del mapa perceptual)
+//    - const OBRAS     (del script principal)
+//    - canvas#map + mapWrap
+// ================================================================
+
+(function () {
+  'use strict';
+
+  // ──────────────────────────────────────────────────────────────
+  //  1. Datos de obras — descripción y artista por id de catálogo
+  //     Vinculamos CATALOGUE.id → OBRAS[] por coincidencia de nombre.
+  //     Además incluimos un mapa de metadatos curados para las 16
+  //     obras canónicas que sí tienen audio en OBRAS[].
+  // ──────────────────────────────────────────────────────────────
+
+  // Metadatos curados: coincidencia de CATALOGUE.id → datos de OBRAS[]
+  // Formato: { titulo, artista, descripcion, img, audio }
+  const OBRA_META = {
+    'Malevich · Blanco sobre blanco': {
+      titulo: 'Blanco sobre Blanco',
+      artista: 'Kazimir Malevich',
+      descripcion: 'Suprematismo en su estado más puro: dos cuadrados blancos, uno girado levemente sobre el otro. Ausencia total de color cromático. El silencio visual hecho pintura.',
+      img: 'White_on_White_(Malevich,_1918).png',
+      audio: 'White_on_White_(Malevich,_1918).wav',
+    },
+    'Malevich · Cuadrado negro': {
+      titulo: 'Cuadrado Negro',
+      artista: 'Kazimir Malevich',
+      descripcion: 'Icono del Suprematismo. Un cuadrado negro sobre fondo blanco, sin representación de ningún objeto real. Simboliza la «sensación pura» liberada de toda referencia figurativa.',
+      img: 'Malevich_Cuadrado_Negro_1915.jpg',
+      audio: 'Malevich_Cuadrado_Negro_1915.wav',
+    },
+    'Goya · Saturno': {
+      titulo: 'Saturno devorando a su hijo',
+      artista: 'Francisco de Goya',
+      descripcion: 'Una de las Pinturas Negras de Goya. Saturno, dios del tiempo, devora a uno de sus hijos para evitar ser destronado. Pincelada brutal, paleta oscura, figura grotesca y aterradora.',
+      img: 'goya-saturno.jpg',
+      audio: 'goya-saturno.wav',
+    },
+    'Rembrandt · Self-Portrait': {
+      titulo: 'Autorretrato',
+      artista: 'Rembrandt van Rijn',
+      descripcion: 'Autorretrato tardío de Rembrandt. La luz emerge de la oscuridad con la técnica del claroscuro más depurada. El rostro envejecido mira directamente, sin idealización.',
+      img: '500px-Rembrandt_van_Rijn_-_Self-Portrait_-_Google_Art_Project.jpg',
+      audio: '500px-Rembrandt_van_Rijn_-_Self-Portrait_-_Google_Art_Project.wav',
+    },
+    'Hopper · Morning Sun': {
+      titulo: 'Morning Sun',
+      artista: 'Edward Hopper',
+      descripcion: 'Una mujer sentada en la cama, bañada por la luz de la mañana. Soledad urbana norteamericana. Colores cálidos pero contenidos, composición geométrica, silencio palpable.',
+      img: 'EdwardHopperMorningSun1952.jpg',
+      audio: 'EdwardHopperMorningSun1952.wav',
+    },
+    'Vermeer · La lechera': {
+      titulo: 'La Lechera',
+      artista: 'Johannes Vermeer',
+      descripcion: 'Una criada vierte leche con concentración absoluta. Luz de ventana difusa y precisa. Azules y amarillos en equilibrio casi musical. Una escena cotidiana convertida en eternidad.',
+      img: 'Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.png',
+      audio: 'Johannes_Vermeer_-_Het_melkmeisje_-_Google_Art_Project.wav',
+    },
+    'Dalí · Perfil del tiempo': {
+      titulo: 'La Persistencia de la Memoria',
+      artista: 'Salvador Dalí',
+      descripcion: 'Relojes blandos se derriten sobre un paisaje de Cadaqués. El tiempo se disuelve. Precisión fotográfica al servicio de lo imposible. El inconsciente arquitecturado en aceite.',
+      img: 'Dalí,_Perfil_del_tiempo,_Vroclavo,_7.jpeg',
+      audio: 'Dalí,_Perfil_del_tiempo,_Vroclavo,_7.wav',
+    },
+    'Cézanne · Montaña Sainte-Victoire': {
+      titulo: 'La Montagne Sainte-Victoire',
+      artista: 'Paul Cézanne',
+      descripcion: 'La montaña provenzal que Cézanne pintó más de sesenta veces. Pinceladas moduladas construyen el volumen sin perspectiva clásica. Puente entre el Impresionismo y el Cubismo.',
+      img: 'Paul_Cézanne_-_Montagne_Saint-victoire_-_Google_Art_Project.jpg',
+      audio: 'Paul_Cézanne_-_Montagne_Saint-victoire_-_Google_Art_Project.wav',
+    },
+    'Monet · Cliff Walk Pourville': {
+      titulo: 'Acantilados de Pourville',
+      artista: 'Claude Monet',
+      descripcion: 'Dos figuras femeninas en lo alto del acantilado, bajo un cielo normando. Pinceladas vibrantes capturan el movimiento del viento y el brillo del mar. Impresionismo pleno.',
+      img: 'Claude_Monet_-_Cliff_Walk_at_Pourville_-_Google_Art_Project.jpg',
+      audio: 'Claude_Monet_-_Cliff_Walk_at_Pourville_-_Google_Art_Project.wav',
+    },
+    'Botticelli · El nacimiento de Venus': {
+      titulo: 'El Nacimiento de Venus',
+      artista: 'Sandro Botticelli',
+      descripcion: 'Venus emerge del mar sobre una concha, impulsada por los vientos. Línea sinuosa, paleta de rosas y verdes delicados. El ideal de belleza renacentista florentino cristalizado.',
+      img: 'Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg',
+      audio: 'Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.wav',
+    },
+    'Degas · Dancers pink and green': {
+      titulo: 'Bailarinas Azules',
+      artista: 'Edgar Degas',
+      descripcion: 'Cuatro bailarinas ajustan sus trajes en un momento de pausa. El azul domina el cuadro con intensidad. Composición fragmentada, vista desde un ángulo inusual, casi fotográfico.',
+      img: 'Edgar_Germain_Hilaire_Degas_076.jpg',
+      audio: 'Edgar_Germain_Hilaire_Degas_076.wav',
+    },
+    'Monet · Amapolas': {
+      titulo: 'Campo de Amapolas',
+      artista: 'Claude Monet',
+      descripcion: 'Un campo de amapolas rojas bajo el cielo de verano francés. Manchas de color puro, sin contorno definido. La vibración del color sobre el lienzo recrea la sensación de la luz.',
+      img: 'field-of-poppies.jpg!Large.jpg',
+      audio: 'field-of-poppies.jpg!Large.wav',
+    },
+    '1280px-Korenveld_Van_Gogh': {
+      titulo: 'Campo de Trigo con Cuervos',
+      artista: 'Vincent van Gogh',
+      descripcion: 'Una de las últimas obras de Van Gogh. Un camino se bifurca bajo un cielo turbulento y cuervos negros. Pinceladas en espiral expresan angustia y al mismo tiempo amor por la tierra.',
+      img: '1280px-Korenveld_met_kraaien_-_s0149V1962_-_Van_Gogh_Museum.jpg',
+      audio: '1280px-Korenveld_met_kraaien_-_s0149V1962_-_Van_Gogh_Museum.wav',
+    },
+    'Kandinsky · Several Circles': {
+      titulo: 'Several Circles',
+      artista: 'Wassily Kandinsky',
+      descripcion: 'Círculos de colores puros flotan sobre fondo negro. Para Kandinsky, cada color tiene una resonancia espiritual y musical. Este cuadro es casi una partitura visual.',
+      img: 'este.jpg',
+      audio: 'este.wav',
+    },
+    'Matisse · La habitación roja': {
+      titulo: 'La Mesa Roja',
+      artista: 'Henri Matisse',
+      descripcion: 'Una habitación donde el rojo lo invade todo: mesa, paredes, decoración. Los patrones arabescos vibran sobre el rojo intenso. Color liberado de la forma, música hecha pintura.',
+      img: 'La_Desserte_rouge,_par_Henri_Matisse.jpg',
+      audio: 'La_Desserte_rouge,_par_Henri_Matisse.wav',
+    },
+    'Kandinsky · Jaune Rouge Bleu': {
+      titulo: 'Amarillo Rojo Azul',
+      artista: 'Wassily Kandinsky',
+      descripcion: 'Composición abstracta en la que los tres colores primarios organizan el espacio. Líneas, curvas y manchas interactúan como instrumentos en una sinfonía. El cuadro más cromático del catálogo.',
+      img: '3840px-Kandinsky_-_Jaune_Rouge_Bleu.jpg',
+      audio: '3840px-Kandinsky_-_Jaune_Rouge_Bleu.wav',
+    },
+  };
+
+  // Aliases del catálogo al mapa META
+  // (CATALOGUE.id → clave de OBRA_META)
+  const CATALOGUE_ALIASES = {
+    'Malevich · Blanco sobre blanco':         'Malevich · Blanco sobre blanco',
+    'Malevich · Cuadrado negro':              'Malevich · Cuadrado negro',
+    'Goya · Saturno':                         'Goya · Saturno',
+    'Rembrandt · Self-Portrait':              'Rembrandt · Self-Portrait',
+    'Hopper · Morning Sun':                   'Hopper · Morning Sun',
+    'Vermeer · La lechera':                   'Vermeer · La lechera',
+    'Dalí · Perfil del tiempo':               'Dalí · Perfil del tiempo',
+    'Cézanne · Montaña Sainte-Victoire':      'Cézanne · Montaña Sainte-Victoire',
+    'Monet · Cliff Walk Pourville':           'Monet · Cliff Walk Pourville',
+    'Botticelli · El nacimiento de Venus':    'Botticelli · El nacimiento de Venus',
+    'Degas · Dancers pink and green':         'Degas · Dancers pink and green',
+    '1280px-Korenveld_Van_Gogh':              '1280px-Korenveld_Van_Gogh',
+    'Kandinsky · Several Circles':            'Kandinsky · Several Circles',
+    'Matisse · La habitación roja':           'Matisse · La habitación roja',
+    'Kandinsky · Jaune Rouge Bleu':           'Kandinsky · Jaune Rouge Bleu',
+  };
+
+  // Buscar metadatos por catalogue.id (búsqueda flexible)
+  function findMeta(catalogueId) {
+    // 1. Alias directo
+    const key = CATALOGUE_ALIASES[catalogueId];
+    if (key && OBRA_META[key]) return OBRA_META[key];
+
+    // 2. Coincidencia parcial en las claves del mapa
+    const idLower = catalogueId.toLowerCase();
+    for (const k of Object.keys(OBRA_META)) {
+      if (idLower.includes(k.toLowerCase()) || k.toLowerCase().includes(idLower)) {
+        return OBRA_META[k];
+      }
+    }
+
+    // 3. Fallback: extraer artista y título del id del catálogo
+    const parts = catalogueId.split('·');
+    const artista = parts[0]?.trim() ?? '';
+    const titulo  = parts.slice(1).join('·').trim() || catalogueId;
+    return {
+      titulo,
+      artista,
+      descripcion: 'Obra del catálogo ARGIRA. Explora su sonificación en el mapa perceptual.',
+      img: null,
+      audio: null,
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  2. Construcción del DOM del modal (se crea una sola vez)
+  // ──────────────────────────────────────────────────────────────
+
+  function buildModal() {
+    // Overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'argira-obra-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+
+    overlay.innerHTML = `
+      <div
+        id="argira-obra-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="argira-obra-title"
+        aria-describedby="argira-obra-desc"
+        tabindex="-1"
+      >
+        <!-- X de cierre -->
+        <button
+          id="argira-obra-x-btn"
+          aria-label="Cerrar panel de obra"
+          type="button"
+        >✕</button>
+
+        <!-- Imagen -->
+        <div id="argira-obra-img-wrap" aria-hidden="true">
+          <span id="argira-obra-img-placeholder">cargando imagen…</span>
+          <img id="argira-obra-img" src="" alt="" />
+        </div>
+
+        <!-- Cuerpo -->
+        <div id="argira-obra-body">
+          <p id="argira-obra-artist"></p>
+          <h2 id="argira-obra-title"></h2>
+          <p id="argira-obra-desc"></p>
+          <p id="argira-obra-nivel"></p>
+
+          <div id="argira-obra-actions">
+            <button
+              id="argira-obra-listen-btn"
+              class="argira-modal-btn"
+              type="button"
+              aria-pressed="false"
+            >🔊 Escuchar</button>
+            <button
+              id="argira-obra-close-btn"
+              class="argira-modal-btn"
+              type="button"
+            >Cerrar</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  3. Lógica del modal
+  // ──────────────────────────────────────────────────────────────
+
+  let overlay, modal, listenBtn, closeBtn, xBtn;
+  let _currentAudio = null;    // objeto de audio activo en el modal
+  let _lastFocused  = null;    // elemento que tenía el foco antes de abrir
+  let _focusables   = [];      // elementos focusables dentro del modal
+
+  function getFocusables() {
+    return Array.from(modal.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )).filter(el => !el.disabled && !el.closest('[hidden]'));
+  }
+
+  function trapFocus(e) {
+    const els = getFocusables();
+    if (!els.length) return;
+    const first = els[0];
+    const last  = els[els.length - 1];
+    if (e.key === 'Tab') {
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    if (e.key === 'Escape') {
+      closeModal();
+    }
+  }
+
+  function openModal(meta) {
+    // Inicializar el modal si aún no existe
+    if (!overlay) {
+      overlay  = document.getElementById('argira-obra-overlay') || buildModal();
+      modal    = document.getElementById('argira-obra-modal');
+      listenBtn = document.getElementById('argira-obra-listen-btn');
+      closeBtn  = document.getElementById('argira-obra-close-btn');
+      xBtn      = document.getElementById('argira-obra-x-btn');
+
+      closeBtn.addEventListener('click', closeModal);
+      xBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) closeModal();
+      });
+      listenBtn.addEventListener('click', toggleListen);
+    }
+
+    // Rellenar contenido
+    document.getElementById('argira-obra-title').textContent  = meta.titulo;
+    document.getElementById('argira-obra-artist').textContent = meta.artista;
+    document.getElementById('argira-obra-desc').textContent   = meta.descripcion;
+
+    // Nivel cromático si disponible
+    const nivelEl = document.getElementById('argira-obra-nivel');
+    if (meta.label) {
+      const parts = meta.label.split('·');
+      const nivel = parts[parts.length - 1]?.trim();
+      nivelEl.textContent = nivel ? `Nivel cromático: ${nivel}` : '';
+    } else {
+      nivelEl.textContent = '';
+    }
+
+    // Imagen
+    const imgEl  = document.getElementById('argira-obra-img');
+    const wrapEl = document.getElementById('argira-obra-img-wrap');
+    const phEl   = document.getElementById('argira-obra-img-placeholder');
+    imgEl.className = '';
+    imgEl.alt = `${meta.titulo} — ${meta.artista}`;
+
+    if (meta.img) {
+      imgEl.src = '';
+      phEl.textContent = 'cargando imagen…';
+      imgEl.onload  = () => {
+        imgEl.classList.add('loaded');
+        phEl.style.display = 'none';
+      };
+      imgEl.onerror = () => {
+        phEl.textContent = 'imagen no disponible';
+        imgEl.style.display = 'none';
+      };
+      imgEl.src = meta.img;
+    } else {
+      imgEl.src = '';
+      imgEl.style.display = 'none';
+      phEl.textContent = 'sin imagen';
+    }
+
+    // Botón escuchar
+    resetListenBtn();
+    listenBtn.disabled = !meta.audio && !meta.descripcion;
+    listenBtn.dataset.audio   = meta.audio || '';
+    listenBtn.dataset.texto   = meta.descripcion || '';
+    listenBtn.dataset.titulo  = meta.titulo;
+    listenBtn.dataset.artista = meta.artista;
+
+    // Guardar foco anterior
+    _lastFocused = document.activeElement;
+
+    // Abrir
+    overlay.removeAttribute('aria-hidden');
+    overlay.classList.add('open');
+
+    // Focus al modal tras la transición
+    setTimeout(() => {
+      modal.focus();
+    }, 50);
+
+    // Trap de foco
+    document.addEventListener('keydown', trapFocus);
+
+    // Anuncio para lector de pantalla
+    announceToSR(`Obra seleccionada: ${meta.titulo}, ${meta.artista}. Pulsa Escuchar para oír la descripción, o Cerrar para volver al mapa.`);
+  }
+
+  function closeModal() {
+    if (!overlay) return;
+
+    // Detener audio / voz
+    stopListen();
+
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+
+    document.removeEventListener('keydown', trapFocus);
+
+    // Restaurar foco
+    if (_lastFocused && typeof _lastFocused.focus === 'function') {
+      setTimeout(() => _lastFocused.focus(), 50);
+    }
+  }
+
+  function toggleListen() {
+    if (listenBtn.getAttribute('aria-pressed') === 'true') {
+      stopListen();
+    } else {
+      startListen();
+    }
+  }
+
+  function startListen() {
+    const audio  = listenBtn.dataset.audio;
+    const texto  = listenBtn.dataset.texto;
+    const titulo = listenBtn.dataset.titulo;
+    const artista = listenBtn.dataset.artista;
+
+    // Componer texto completo
+    const textoCompleto = [
+      titulo && artista ? `${titulo}, por ${artista}.` : titulo || artista,
+      texto,
+    ].filter(Boolean).join(' ');
+
+    // Parar cualquier voz/audio en curso
+    if (window.ArgiraSpeech) window.ArgiraSpeech.stop();
+    if (_currentAudio) { _currentAudio.pause(); _currentAudio = null; }
+
+    listenBtn.setAttribute('aria-pressed', 'true');
+    listenBtn.classList.add('speaking');
+    listenBtn.innerHTML = '⏹ Detener';
+
+    // Hablar con ArgiraSpeech
+    if (window.ArgiraSpeech) {
+      window.ArgiraSpeech.speak(textoCompleto, { rate: 0.92 }).then(() => {
+        // Si además hay audio de sonificación, reproducirlo después de la voz
+        if (audio && listenBtn.getAttribute('aria-pressed') === 'true') {
+          playAudioFile(audio);
+        } else {
+          resetListenBtn();
+        }
+      });
+    }
+  }
+
+  function playAudioFile(src) {
+    try {
+      _currentAudio = new Audio(src);
+      _currentAudio.volume = 0.75;
+      _currentAudio.onended = () => {
+        _currentAudio = null;
+        resetListenBtn();
+      };
+      _currentAudio.onerror = () => {
+        _currentAudio = null;
+        resetListenBtn();
+      };
+      _currentAudio.play().catch(() => resetListenBtn());
+    } catch (e) {
+      resetListenBtn();
+    }
+  }
+
+  function stopListen() {
+    if (window.ArgiraSpeech) window.ArgiraSpeech.stop();
+    if (_currentAudio) {
+      _currentAudio.pause();
+      _currentAudio.currentTime = 0;
+      _currentAudio = null;
+    }
+    resetListenBtn();
+  }
+
+  function resetListenBtn() {
+    if (!listenBtn) return;
+    listenBtn.setAttribute('aria-pressed', 'false');
+    listenBtn.classList.remove('speaking');
+    listenBtn.innerHTML = '🔊 Escuchar';
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  4. Live region para lectores de pantalla
+  // ──────────────────────────────────────────────────────────────
+
+  let _srAnnouncer = null;
+
+  function announceToSR(msg) {
+    if (!_srAnnouncer) {
+      // Reutilizar sr-announcer si existe en la página
+      _srAnnouncer = document.getElementById('sr-announcer');
+    }
+    if (!_srAnnouncer) {
+      _srAnnouncer = document.createElement('div');
+      _srAnnouncer.setAttribute('role', 'status');
+      _srAnnouncer.setAttribute('aria-live', 'polite');
+      _srAnnouncer.setAttribute('aria-atomic', 'true');
+      _srAnnouncer.style.cssText =
+        'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;';
+      document.body.appendChild(_srAnnouncer);
+    }
+    _srAnnouncer.textContent = '';
+    void _srAnnouncer.offsetHeight; // fuerza reflow para re-anuncio
+    _srAnnouncer.textContent = msg;
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  5. Detección de doble click / doble tap en el canvas del mapa
+  // ──────────────────────────────────────────────────────────────
+
+  function init() {
+    const canvas  = document.getElementById('map');
+    const mapWrap = document.getElementById('mapWrap');
+
+    if (!canvas || !mapWrap) {
+      // Esperar a que el DOM esté listo
+      setTimeout(init, 200);
+      return;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    //  FASE 2A — Overlay DOM encima del canvas
+    //  Capa vacía, pointer-events:none, sincronizada con el canvas.
+    //  Preparada para hotspots accesibles en fases posteriores.
+    // ──────────────────────────────────────────────────────────
+    (function initOverlay() {
+      // Crear el div solo si no existe ya (hot-reload seguro)
+      let overlay = document.getElementById('map-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'map-overlay';
+        canvas.insertAdjacentElement('afterend', overlay);
+      }
+
+      // getBoundingClientRect: fuente única de verdad para el tamaño visual.
+      function canvasSize() {
+        const r = canvas.getBoundingClientRect();
+        return { W: r.width, H: r.height };
+      }
+
+      function syncOverlay() {
+        const { W, H } = canvasSize();
+        overlay.style.width  = W + 'px';
+        overlay.style.height = H + 'px';
+      }
+
+      // ──────────────────────────────────────────────────────────
+      //  FASE 2B + 2C — Botones DOM accesibles por cada obra
+      //  Posición: misma fórmula que drawWorks() del canvas.
+      //  FASE 2C añade: tabindex, role, aria-label.
+      // ──────────────────────────────────────────────────────────
+      function renderMapNodes() {
+        if (!window.CATALOGUE) return;
+
+        const { W, H } = canvasSize();
+        const PAD = 44;
+
+        const { min: P1_lo, max: P1_hi } = getP1Range();
+        const { min: P4_lo, max: P4_hi } = getP4Range();
+        const normP1 = v => (v - P1_lo) / (P1_hi - P1_lo);
+        const normP4 = v => (v - P4_lo) / (P4_hi - P4_lo);
+
+        // Limpiar render anterior (resize) — obligatorio para estabilidad
+        overlay.querySelectorAll('.map-node').forEach(n => n.remove());
+
+        window.CATALOGUE.forEach(obra => {
+          const btn = document.createElement('button');
+
+          // ── Atributos base ───────────────────────────────────
+          btn.className = 'map-node';
+          btn.type      = 'button';
+          btn.setAttribute('role', 'button');
+          btn.setAttribute('tabindex', '0');
+          btn.dataset.id = obra.id;
+
+          // ── ARIA label contextual (FASE 2C) ──────────────────
+          // findMeta devuelve { titulo, artista, … } o fallback desde el id
+          const meta = findMeta(obra.id);
+          btn.setAttribute(
+            'aria-label',
+            `${meta.titulo}, de ${meta.artista}. Abrir obra en el mapa perceptual`
+          );
+
+          // ── Posición: misma fórmula que el canvas ────────────
+          const cx = PAD + normP1(obra.P1) * (W - PAD * 2);
+          const cy = PAD + (1 - normP4(obra.P4)) * (H - PAD * 2);
+
+          btn.style.cssText = [
+            'position:absolute',
+            `left:${cx}px`,
+            `top:${cy}px`,
+            'width:44px',
+            'height:44px',
+            'transform:translate(-50%,-50%)',
+            // Visualmente transparente — el canvas dibuja los puntos.
+            // Los nodos existen para teclado y lectores de pantalla.
+            'opacity:0',
+            'background:none',
+            'border:none',
+            'padding:0',
+            'cursor:pointer',
+          ].join(';');
+
+          overlay.appendChild(btn);
+        });
+      }
+
+      // ──────────────────────────────────────────────────────────
+      //  FASE 2C — Eventos delegados (un solo listener por tipo)
+      //  Delegación sobre el overlay: sin listeners por nodo,
+      //  sin leaks en re-renders, sin duplicados en hot-reload.
+      // ──────────────────────────────────────────────────────────
+
+      // Guarda de re-registro: si init() se reejecutara (SPA / hot-reload)
+      // los listeners ya existen — no añadir duplicados.
+      if (overlay.dataset.listenersAttached !== 'true') {
+        overlay.dataset.listenersAttached = 'true';
+
+        // ── Activación por click / tap ────────────────────────
+        overlay.addEventListener('click', function onNodeClick(e) {
+          const btn = e.target.closest('.map-node');
+          if (!btn) return;
+
+          const obra = window.CATALOGUE && window.CATALOGUE.find(o => o.id === btn.dataset.id);
+          if (!obra) return;
+
+          openModal(findMeta(obra.id));
+        });
+
+        // ── Activación por teclado: Enter y Space ─────────────
+        // Necesario porque pointer-events:none en el overlay bloquea
+        // el comportamiento nativo de click en botones con teclado
+        // en algunos navegadores cuando el padre tiene pe:none.
+        overlay.addEventListener('keydown', function onNodeKeydown(e) {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+
+          const btn = e.target.closest('.map-node');
+          if (!btn) return;
+
+          e.preventDefault(); // evitar scroll en Space
+
+          const obra = window.CATALOGUE && window.CATALOGUE.find(o => o.id === btn.dataset.id);
+          if (!obra) return;
+
+          openModal(findMeta(obra.id));
+        });
+      }
+
+      // El overlay necesita pointer-events:auto para recibir eventos
+      // de los botones que contiene, pero solo para esos nodos.
+      // Los gaps entre nodos siguen siendo transparentes al canvas.
+      overlay.style.pointerEvents = 'none'; // base: no interceptar el canvas
+      // Los .map-node individuales activan sus propios eventos
+      // gracias a pointer-events:auto en el CSS de la clase.
+
+      syncOverlay();
+      // Double-rAF: garantiza layout completo antes del primer getBCR.
+      requestAnimationFrame(() => requestAnimationFrame(renderMapNodes));
+
+      const ro = new ResizeObserver(() => {
+        syncOverlay();
+        renderMapNodes();
+      });
+      ro.observe(canvas);
+
+      window.ArgiraMapOverlay     = overlay;
+      window.ArgiraRenderMapNodes = renderMapNodes;
+    })();
+
+    // ── Utilidades de coordenadas ──────────────────────────────
+    // Replicamos la lógica de pToCanvas/canvasToP del mapa principal.
+    // Leemos P1_MIN/MAX y P4_MIN/MAX del scope global del mapa.
+
+    function getP1Range() {
+      if (typeof P1_MIN !== 'undefined') return { min: P1_MIN, max: P1_MAX };
+      if (window.P1_MIN != null) return { min: window.P1_MIN, max: window.P1_MAX };
+      return { min: 1.0, max: 5.0 }; // fallback aproximado
+    }
+
+    function getP4Range() {
+      if (typeof P4_MIN !== 'undefined') return { min: P4_MIN, max: P4_MAX };
+      if (window.P4_MIN != null) return { min: window.P4_MIN, max: window.P4_MAX };
+      return { min: 1.55, max: 1.95 }; // fallback aproximado
+    }
+
+    function getCanvas() {
+      // El canvas usa devicePixelRatio internamente
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const W = rect.width;
+      const H = rect.height;
+      const PAD = 44; // igual que en el script del mapa
+      return { W, H, PAD, dpr };
+    }
+
+    function clientToNearest(clientX, clientY) {
+      const { W, H, PAD } = getCanvas();
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      const { min: P1_lo, max: P1_hi } = getP1Range();
+      const { min: P4_lo, max: P4_hi } = getP4Range();
+
+      const normP1 = v => (v - P1_lo) / (P1_hi - P1_lo);
+      const normP4 = v => (v - P4_lo) / (P4_hi - P4_lo);
+
+      // Coordenadas del puntero en espacio perceptual
+      const ptrP1 = P1_lo + ((x - PAD) / (W - PAD * 2)) * (P1_hi - P1_lo);
+      const ptrP4 = P4_hi - ((y - PAD) / (H - PAD * 2)) * (P4_hi - P4_lo);
+
+      if (!window.CATALOGUE || !window.CATALOGUE.length) return null;
+
+      // Punto del canvas de cada obra
+      let bestDist = Infinity;
+      let bestObra = null;
+
+      window.CATALOGUE.forEach(obra => {
+        const cx = PAD + normP1(obra.P1) * (W - PAD * 2);
+        const cy = PAD + (1 - normP4(obra.P4)) * (H - PAD * 2);
+        const dx = x - cx;
+        const dy = y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const HIT_R = 18; // px — radio de hit area
+        if (dist < HIT_R && dist < bestDist) {
+          bestDist = dist;
+          bestObra = obra;
+        }
+      });
+
+      return bestObra;
+    }
+
+    // ── Indicador visual de doble tap ─────────────────────────
+    function showRipple(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const dot = document.createElement('div');
+      dot.className = 'argira-point-hint';
+      dot.style.left = (clientX - rect.left + rect.x) + 'px';
+      dot.style.top  = (clientY - rect.top  + rect.y) + 'px';
+      // posición en la página
+      dot.style.left = clientX + 'px';
+      dot.style.top  = clientY + 'px';
+      dot.style.position = 'fixed';
+      document.body.appendChild(dot);
+      setTimeout(() => dot.remove(), 600);
+    }
+
+    // ── Handler principal ──────────────────────────────────────
+    function onDoubleTap(clientX, clientY) {
+      showRipple(clientX, clientY);
+      const obra = clientToNearest(clientX, clientY);
+      if (!obra) return;
+
+      const meta = findMeta(obra.id);
+
+      // Añadir el label del OBRAS[] si disponible (para el nivel)
+      if (window.OBRAS) {
+        const obraMatch = window.OBRAS.find(o => {
+          const metaKey = Object.values(CATALOGUE_ALIASES).find(k => {
+            const m = OBRA_META[k];
+            return m && (m.img === meta.img || m.audio === meta.audio);
+          });
+          return metaKey != null;
+        });
+        if (obraMatch) meta.label = obraMatch.label;
+      }
+
+      openModal(meta);
+    }
+
+    // ── Desktop: dblclick ──────────────────────────────────────
+    mapWrap.addEventListener('dblclick', e => {
+      onDoubleTap(e.clientX, e.clientY);
+    });
+
+    // ── Móvil: doble tap ───────────────────────────────────────
+    let _lastTapTime = 0;
+    let _lastTapX    = 0;
+    let _lastTapY    = 0;
+    const DOUBLE_TAP_DELAY = 320; // ms
+    const DOUBLE_TAP_DIST  = 30;  // px
+
+    mapWrap.addEventListener('touchend', e => {
+      const touch = e.changedTouches[0];
+      const now   = Date.now();
+      const dx = touch.clientX - _lastTapX;
+      const dy = touch.clientY - _lastTapY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (now - _lastTapTime < DOUBLE_TAP_DELAY && dist < DOUBLE_TAP_DIST) {
+        // Doble tap detectado
+        e.preventDefault(); // evitar zoom nativo en iOS
+        onDoubleTap(touch.clientX, touch.clientY);
+        _lastTapTime = 0; // reset para evitar triple
+      } else {
+        _lastTapTime = now;
+        _lastTapX    = touch.clientX;
+        _lastTapY    = touch.clientY;
+      }
+    }, { passive: false });
+
+    // ── Teclado: cuando una obra tiene foco en el panel ────────
+    // Si el usuario navega con teclado y pulsa Enter/Space sobre el panel
+    // de "obra más cercana", también abrimos el modal.
+    const anchorTitle = document.getElementById('anchorTitle');
+    if (anchorTitle) {
+      anchorTitle.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const label = anchorTitle.textContent.trim();
+          if (label && label !== '—') {
+            const meta = findMeta(label);
+            openModal(meta);
+          }
+        }
+      });
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  //  6. Inyectar la hoja de estilos y arrancar al cargar el DOM
+  // ──────────────────────────────────────────────────────────────
+
+  function injectStyles() {
+    if (document.getElementById('argira-explorer-css')) return;
+    const link = document.createElement('link');
+    link.id   = 'argira-explorer-css';
+    link.rel  = 'stylesheet';
+    link.href = 'explorer.css';
+    document.head.appendChild(link);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      injectStyles();
+      init();
+    });
+  } else {
+    injectStyles();
+    init();
+  }
+
+  // Exponer API mínima por si otras partes del sistema quieren llamar al modal
+  window.ArgiraMapExplorer = {
+    open: openModal,
+    close: closeModal,
+    findMeta,
+    get overlay() { return window.ArgiraMapOverlay || null; },
+    get renderNodes() { return window.ArgiraRenderMapNodes || null; },
+  };
+
+})();
