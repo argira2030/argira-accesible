@@ -1,0 +1,2782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Argira — Campo Perceptual</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* SKIP LINK — WCAG 2.4.1
+     left:-999px es el patrón recomendado: más fiable que top:-100px
+     en VoiceOver iOS y evita reflow en el grid. */
+  .skip-link {
+    position: absolute;
+    top: 8px;
+    left: 16px;
+    z-index: 9999;
+    padding: 10px 18px;
+    background: #e8e0c8;
+    color: #0a0a0b;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 4px;
+    text-decoration: none;
+    transform: translateX(-120%);
+    transition: transform 0.15s;
+  }
+  .skip-link:focus {
+    transform: translateX(0);
+    outline: 3px solid #e8c84a;
+    outline-offset: 2px;
+  }
+
+  /* BOTÓN VOLVER AL MUSEO — dentro del header, no fixed */
+  #btn-volver-museo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  #btn-volver-museo:hover {
+    background: var(--accent);
+    color: #0a0a0b;
+    border-color: var(--accent);
+  }
+  #btn-volver-museo:focus-visible {
+    background: var(--accent);
+    color: #0a0a0b;
+    border-color: var(--accent);
+    outline: 3px solid #e8c84a;
+    outline-offset: 2px;
+  }
+
+  :root {
+    --bg:       #0a0a0b;
+    --surface:  #111113;
+    --border:   #222226;
+    --dim:      #333339;
+    --text:     #c8c8d0;
+    --muted:    #767680; /* era #55555f — ratio 3.6:1 → ahora ≈4.6:1 AA */
+    --accent:   #e8e0c8;
+    --cursor:   #ffffff;
+    --heat-lo:  #1a2a3a;
+    --heat-hi:  #4a3a1a;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow: hidden;
+    cursor: none;
+    overscroll-behavior: none;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    grid-template-rows: 36px 1fr 24px auto;
+    grid-template-areas:
+      "header  header"
+      "canvas  panel"
+      "footer  footer"
+      "desc    desc";
+    width: 100%;          /* impide que el grid crezca más allá del body */
+    max-width: 100vw;     /* segunda barrera: nunca más ancho que el viewport */
+    height: 100vh;
+    height: 100dvh;
+    gap: 0;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    grid-area: header;
+    min-width: 0;         /* grid items tienen min-width:auto por defecto — esto los contiene */
+    display: flex;
+    align-items: center;
+    padding: 0 12px 0 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+    overflow: hidden;
+  }
+  .logo {
+    display: none; /* oculto temporalmente — rollback: cambiar a display:block */
+  }
+  .header-axes {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+  .header-axes span { color: var(--text); }
+  .header-right {
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  @media (max-width: 700px), (pointer: coarse) {
+    .header-axes { display: none; }
+    .header-right { display: none; }
+    #btn-volver-museo { font-size: 9px; padding: 4px 9px; gap: 4px; }
+  }
+  /* label responsivo — breakpoint ampliado para cubrir móviles landscape y tablets */
+  .label-short { display: none; }
+  @media (max-width: 960px) {
+    .label-long  { display: none; }
+    .label-short { display: inline; }
+  }
+
+  /* CANVAS AREA */
+  #mapWrap {
+    grid-area: canvas;
+    min-width: 0;         /* previene expansión del grid por min-content del canvas */
+    position: relative;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+    min-height: 0;
+    touch-action: none; /* impide que Android interprete el gesto como scroll */
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  /* AXIS LABELS on canvas */
+  .axis-label {
+    position: absolute;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+  #axisX { bottom: 8px; right: 12px; }
+  #axisY { top: 8px; left: 8px; }
+  #axisX-lo { bottom: 8px; left: 12px; color: var(--dim); }
+  #axisY-lo { bottom: 28px; left: 8px; color: var(--dim); }
+
+  /* COORDINATES */
+  #coords {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-size: 9px;
+    color: var(--muted);
+    text-align: right;
+    pointer-events: none;
+    line-height: 1.8;
+  }
+  #coords .val { color: var(--text); }
+
+  /* SIDE PANEL */
+  #panel {
+    grid-area: panel;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .panel-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-label {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* DOMINANT WORK */
+  #dominantTitle {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+    line-height: 1.4;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+  #dominantScore {
+    font-size: 10px;
+    color: var(--muted);
+  }
+  #dominantScore span { color: var(--text); }
+
+  /* NEIGHBOURS */
+  #neighbours {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+  }
+  .neighbour-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+    align-items: center;
+  }
+  .n-label {
+    font-size: 10px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .n-weight {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+    min-width: 36px;
+  }
+  .n-bar-wrap {
+    grid-column: 1 / -1;
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+  }
+  .n-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 1px;
+    transition: width 0.12s ease;
+  }
+
+  /* SONIC PARAMS */
+  .sonic-grid {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 3px 8px;
+    align-items: center;
+  }
+  .s-key { font-size: 9px; color: var(--muted); }
+  .s-bar-wrap { height: 2px; background: var(--border); border-radius: 1px; }
+  .s-bar { height: 100%; background: var(--dim); border-radius: 1px; transition: width 0.12s ease; }
+  .s-val { font-size: 9px; color: var(--text); text-align: right; }
+
+  /* REGION */
+  #regionText {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.6;
+    font-family: var(--sans);
+  }
+
+  /* ANCHOR IMAGE */
+  #anchorImgWrap {
+    margin-top: 10px;
+    width: 100%;
+    height: 120px;
+    overflow: hidden;
+    border-radius: 3px;
+    border: 1px solid var(--dim);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Transición de altura en lugar de display:none — evita reflow brusco
+       en el panel flex-column con altura fija por grid */
+    transition: height 0.2s ease, margin-top 0.2s ease, opacity 0.2s ease,
+                border-color 0.2s ease;
+  }
+  #anchorImgWrap.img-hidden {
+    height: 0;
+    margin-top: 0;
+    opacity: 0;
+    border-color: transparent;
+    pointer-events: none;
+  }
+  #anchorImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  #anchorImg.loaded { opacity: 1; }
+  @media (max-width: 700px), (pointer: coarse) {
+    #anchorImgWrap { height: 80px; }
+  }
+
+
+  #dominantTitle, #anchorTitle {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  /* FOOTER PINNED */
+  #pinnedState {
+    display: none;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  #pinnedTitle {
+    color: var(--text);
+    letter-spacing: 0.04em;
+  }
+
+  /* STATUS BAR */
+  footer {
+    grid-area: footer;
+    min-width: 0;         /* mismo patrón: contiene el ítem dentro del grid */
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    border-top: 1px solid var(--border);
+    gap: 24px;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+  footer span { color: var(--dim); }
+  #status { margin-left: auto; }
+  #btn-detener {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--dim);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #btn-detener.visible { display: flex; }
+  #btn-detener:focus-visible { outline: 3px solid #e8c84a; outline-offset: 2px; }
+  #btn-detener:hover { border-color: var(--accent); color: var(--accent); }
+  /* ── MÓVIL: layout vertical + bottom sheet ─────────────── */
+  @media (max-width: 700px), (pointer: coarse) {
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 36px 1fr auto 24px auto;
+      grid-template-areas:
+        "header"
+        "canvas"
+        "panel"
+        "footer"
+        "desc";
+    }
+    #mapWrap {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      height: 62vh;
+      min-height: 0;
+      min-width: 0;
+    }
+    #panel {
+      grid-row: 3;
+      height: 22vh;
+      min-height: 80px;
+      max-height: 60vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: height 0.25s ease;
+      border-top: 2px solid var(--border);
+      flex-direction: row;
+      flex-wrap: wrap;
+      background: var(--surface);
+      position: relative;
+    }
+    /* panel drag handle visual — aria-hidden, el botón real está en HTML */
+    #panel::before {
+      content: '';
+      display: block;
+      width: 40px;
+      height: 4px;
+      background: var(--dim);
+      border-radius: 2px;
+      margin: 8px auto 4px;
+      flex-shrink: 0;
+      flex-basis: 100%;
+      pointer-events: none;
+    }
+    #panel-toggle-btn {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 24px;
+      background: transparent;
+      border: none;
+      cursor: ns-resize;
+      z-index: 1;
+    }
+    #panel-toggle-btn:focus {
+      outline: 2px solid #e8c84a;
+      outline-offset: -2px;
+    }
+    #panel.expanded { height: 55vh; }
+    .panel-section { flex: 1 1 48%; min-width: 140px; border-right: 1px solid var(--border); }
+    #dominantTitle { font-size: 10px; }
+    #neighbours { display: none; }
+    #panel.expanded #neighbours { display: flex; }
+    html, body { cursor: default; }
+    footer { font-size: 8px; gap: 8px; padding: 0 8px; }
+  }
+
+  /* DESCRIPTION BAR — collapsible on mobile */
+  #descBar {
+    grid-area: desc;
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 9px;
+    color: var(--muted);
+    line-height: 1.55;
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+  /* Toggle button — hidden on desktop */
+  #descToggle {
+    display: none;
+  }
+  #descContent {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 10px;
+    flex: 1;
+  }
+  #descBar .desc-sep {
+    color: var(--dim);
+    flex-shrink: 0;
+  }
+  #descBar .desc-block {
+    flex: 1;
+  }
+  @media (max-width: 700px), (pointer: coarse) {
+    #descBar {
+      font-size: 8px;
+      flex-direction: column;
+    }
+    #descToggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      min-height: 28px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 8px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+    }
+    #descToggle:focus {
+      outline: 2px solid #e8c84a;
+      outline-offset: -2px;
+    }
+    #descToggle .desc-chevron {
+      font-size: 10px;
+      transition: transform 0.2s;
+      color: var(--dim);
+    }
+    #descBar.open #descToggle .desc-chevron { transform: rotate(180deg); }
+    #descContent {
+      display: none;
+      flex-direction: column;
+      padding: 0 10px 10px;
+      gap: 6px;
+      align-items: flex-start;
+    }
+    #descBar.open #descContent { display: flex; }
+    #descBar .desc-sep { display: none; }
+    #descBar .desc-block { flex: none; }
+  }
+
+  /* ── BOTÓN AYUDA EN HEADER ──────────────────────────── */
+  #btn-ayuda {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  #btn-ayuda:hover {
+    background: var(--dim);
+    border-color: var(--muted);
+  }
+  #btn-ayuda:focus-visible {
+    outline: 3px solid #e8c84a;
+    outline-offset: 2px;
+  }
+
+  /* ── BACKDROP ───────────────────────────────────────── */
+  #ayuda-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    z-index: 10000;
+    backdrop-filter: blur(2px);
+    animation: backdropIn 0.18s ease;
+  }
+  @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ── MODAL ──────────────────────────────────────────── */
+  #ayuda-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10001;
+    width: min(560px, calc(100vw - 24px));
+    background: var(--surface);
+    border: 1px solid var(--dim);
+    border-radius: 6px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+    animation: modalIn 0.2s cubic-bezier(0.16,1,0.3,1);
+    outline: none;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); }
+    to   { opacity: 1; transform: translate(-50%, -50%); }
+  }
+
+  #ayuda-inner {
+    padding: 26px 28px 24px;
+  }
+
+  /* Header del modal */
+  #ayuda-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  #ayuda-titulo {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  #ayuda-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 22px;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  #ayuda-close:hover { color: var(--text); border-color: var(--muted); background: var(--dim); }
+  #ayuda-close:focus-visible { outline: 3px solid #e8c84a; outline-offset: 2px; }
+
+  /* Lista de pasos */
+  #ayuda-pasos {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  #ayuda-pasos li {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 12px;
+    align-items: start;
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.7;
+    font-family: var(--sans);
+  }
+  .ayuda-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    padding-top: 3px;
+  }
+  #ayuda-pasos strong { color: var(--accent); font-weight: 500; }
+
+  /* Botón escuchar */
+  #ayuda-audio-btn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    padding: 11px 16px;
+    background: transparent;
+    border: 1px solid var(--dim);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+  }
+  #ayuda-audio-btn:hover { color: var(--text); border-color: var(--muted); }
+  #ayuda-audio-btn.playing { color: var(--accent); border-color: var(--accent); }
+  #ayuda-audio-btn:focus-visible { outline: 3px solid #e8c84a; outline-offset: 2px; }
+
+  /* NAV — logo-group, btn-audio-header */
+  .logo-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ── BLOQUE CENTRAL HEADER ──────────────────────────── */
+  .header-center-block {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .header-title-text {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  @media (max-width: 700px), (pointer: coarse) {
+    .header-title-text { display: none; }
+    .header-center-block { justify-content: flex-start; flex: 0 0 auto; }
+  }
+  #btn-audio-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.10em;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 260px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  #btn-audio-header:hover { background: var(--accent); color: #0a0a0b; border-color: var(--accent); }
+  #btn-audio-header:focus-visible { outline: 3px solid #e8c84a; outline-offset: 2px; }
+  #btn-audio-header[aria-pressed="true"] {
+    background: var(--dim);
+    border-color: var(--muted);
+    color: var(--accent);
+  }
+
+</style>
+</head>
+
+
+
+  <body>
+<!-- NAVEGACIÓN ACCESIBLE — dos patrones distintos:
+     skip-to-museum : gateway externo → lleva al contexto padre (museo)
+     skip-to-panel  : skip link interno → accesibilidad intra-app (WCAG 2.4.1) -->
+<a class="skip-link" href="https://argira.eus/argira-sonification/" id="skip-to-museum">Ir al Museo Accesible Argira</a>
+<!-- Región de anuncio para lectores de pantalla — invisible, siempre presente -->
+<div id="sr-announcer"
+     role="status"
+     aria-live="assertive"
+     aria-atomic="true"
+     style="position:absolute;left:-999px;width:1px;height:1px;overflow:hidden;"></div>
+<div id="sr-perfil"
+     role="status"
+     aria-live="polite"
+     aria-atomic="true"
+     style="position:absolute;left:-999px;width:1px;height:1px;overflow:hidden;"></div>
+<a class="skip-link" href="#panel" id="skip-to-panel">Ir al panel de estado</a>
+
+<div id="app">
+
+  <header>
+    <!-- Orden DOM = orden de tabulación para lectores de pantalla:
+         1. Guía  2. Audio/Mapa perceptual  3. Volver -->
+    <button id="btn-ayuda"
+            aria-label="Guía de uso accesible"
+            aria-haspopup="dialog"
+            aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M6.2 6.3c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8c0 .8-.5 1.3-1.1 1.7C8.1 8.4 8 8.8 8 9.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="8" cy="11.2" r=".75" fill="currentColor"/>
+      </svg>
+      Guía
+    </button>
+    <div class="header-center-block">
+      <span class="header-title-text">
+        <span class="label-long">ARGIRA · CAMPO PERCEPTUAL</span>
+        <span class="label-short">ARGIRA</span>
+      </span>
+      <button id="btn-audio-header"
+              aria-label="Iniciar campo perceptual de audio — explora obras con sonido"
+              aria-pressed="false"
+              title="Activar / desactivar audio del campo perceptual">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <polygon points="3,2 13,8 3,14" fill="currentColor"/>
+        </svg>
+        <span class="label-long">Audio</span>
+        <span class="label-short">Campo perceptual</span>
+      </button>
+    </div>
+    <div class="logo">Mapa perceptual</div>
+    <div class="header-axes">
+      X = <span>variedad de color</span> &nbsp;·&nbsp;
+      Y = <span>complejidad visual</span> &nbsp;·&nbsp;
+      arriba = mayor complejidad
+    </div>
+    <div class="header-right">v1.8 · N=73 obras</div>
+    <a id="btn-volver-museo"
+       href="https://argira.eus/argira-sonification/"
+       aria-label="Volver al Museo Accesible de Argira — sonificación de pinturas con VoiceOver y TalkBack">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span aria-hidden="true">← Museo</span>
+    </a>
+  </header>
+
+  <div id="mapWrap" role="application" aria-label="Campo perceptual interactivo. Eje horizontal: variedad de color, de monocromático a la izquierda hasta variado a la derecha. Eje vertical: complejidad visual, de simple abajo hasta complejo arriba. Toca para anclar una obra y escuchar su frase musical. El perfil perceptual de cada zona se anuncia automáticamente al explorar.">
+    <canvas id="map" aria-hidden="true"></canvas>
+    <div class="axis-label" id="axisX" aria-hidden="true">variedad de color →</div>
+    <div class="axis-label" id="axisX-lo" aria-hidden="true">← monocromático</div>
+    <div class="axis-label" id="axisY" aria-hidden="true">↑ más complejo</div>
+    <div class="axis-label" id="axisY-lo" aria-hidden="true">más simple</div>
+    <div id="coords" aria-hidden="true">
+      <div>P1 <span class="val" id="cP1">—</span></div>
+      <div>P4 <span class="val" id="cP4">—</span></div>
+      <div style="margin-top:4px">dist₁ <span class="val" id="cDist">—</span></div>
+    </div>
+  </div>
+
+  <section id="panel" tabindex="-1" aria-label="Estado del campo perceptual" aria-live="polite" aria-atomic="false">
+    <button id="panel-toggle-btn" aria-expanded="false" aria-controls="panel" aria-label="Expandir panel de información" hidden></button>
+    <div class="panel-section" role="region" aria-label="Obra más cercana">
+      <div class="panel-label" aria-hidden="true">Obra más cercana</div>
+      <div id="dominantTitle" aria-live="polite" aria-atomic="true">—</div>
+      <div id="dominantScore" aria-live="polite" aria-atomic="true">influencia <span id="dWeight">—</span><span aria-hidden="true"> · distancia <span id="dDist">—</span></span></div>
+    </div>
+
+    <div id="anchorSection" class="panel-section" style="display:none;padding-bottom:0;border-bottom:none">
+      <div class="panel-label" aria-hidden="true">Obra seleccionada</div>
+      <div id="anchorTitle">—</div>
+      <div id="anchorImgWrap" aria-hidden="true">
+        <img id="anchorImg" src="" alt="" />
+      </div>
+    </div>
+
+    <div class="panel-section" style="padding-bottom:10px" role="region" aria-label="Obras cercanas">
+      <div class="panel-label" aria-hidden="true">Obras cercanas</div>
+      <div id="neighbours"></div>
+    </div>
+
+    <div class="panel-section" role="region" aria-label="Parámetros sonoros activos" aria-hidden="true">
+      <div class="panel-label" aria-hidden="true">Sonido activo en esta zona</div>
+      <div class="sonic-grid" id="sonicGrid" aria-hidden="true"></div>
+    </div>
+
+    <div class="panel-section" style="border-bottom:none" role="region" aria-label="Carácter de la zona">
+      <div class="panel-label" aria-hidden="true">Carácter de esta zona</div>
+      <div id="regionText" aria-hidden="true">Explora moviendo el cursor</div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Argira v1.8</span>
+    <div id="pinnedState" style="display:none" role="status" aria-live="polite" aria-label="Obra seleccionada">
+      <span style="color:var(--accent)">▶</span>
+      <span id="pinnedTitle" style="color:var(--text);letter-spacing:0.04em"></span>
+    </div>
+    <span id="modeLabel" aria-hidden="true">σ = 0.18 · k = 7 · ejes P1 × P4</span>
+    <a href="https://doi.org/10.5281/zenodo.20580203" target="_blank" rel="noopener noreferrer" style="color:var(--muted);text-decoration:none;letter-spacing:0.04em;" aria-label="Registro en Zenodo · DOI 10.5281/zenodo.20580203">📄 10.5281/zenodo.20580203</a>
+    <button id="btn-detener"
+            aria-label="Detener audio"
+            title="Detener todo el audio">
+      ⏹ Detener
+    </button>
+    <div id="status" role="status" aria-live="polite" aria-label="Estado">·</div>
+  </footer>
+
+  <div id="descBar" role="region" aria-label="Descripción del campo perceptual">
+    <button id="descToggle" aria-expanded="false" aria-controls="descContent">
+      <span>Cómo funciona este campo</span>
+      <span class="desc-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div id="descContent">
+      <span class="desc-block">
+        Cada punto es una obra. La posición indica su carácter visual: izquierda = colores uniformes, derecha = mucha variedad de color; abajo = formas simples, arriba = texturas complejas.
+      </span>
+      <span class="desc-sep">·</span>
+      <span class="desc-block">
+        Al moverte, el sonido cambia continuamente según la zona. Al tocar una obra, suena una frase musical derivada de sus vecinos más próximos.
+      </span>
+      <span class="desc-sep">·</span>
+      <span class="desc-block">
+        El campo es navegable por sonido sin necesidad de ver la pantalla ni desplazarse.
+      </span>
+    </div>
+  </div>
+
+  <div id="ayuda-backdrop" hidden aria-hidden="true"></div>
+
+</div><!-- /#app -->
+<div id="ayuda-modal"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="ayuda-titulo"
+     tabindex="-1"
+     hidden>
+  <div id="ayuda-inner">
+    <div id="ayuda-header">
+      <span id="ayuda-titulo">Guía rápida</span>
+      <button id="ayuda-close" aria-label="Cerrar guía">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <button id="ayuda-audio-btn">
+      <svg id="ayuda-audio-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <polygon points="3,2 13,8 3,14" fill="currentColor"/>
+      </svg>
+      <span id="ayuda-audio-label">Escuchar guía</span>
+    </button>
+    <ol id="ayuda-pasos" aria-label="Pasos para usar el campo perceptual">
+      <li>
+        <span class="ayuda-num" aria-hidden="true">1</span>
+        <span><strong>Mueve el cursor</strong> (o el dedo) por la pantalla. El sonido cambia en tiempo real según la zona.</span>
+      </li>
+      <li>
+        <span class="ayuda-num" aria-hidden="true">2</span>
+        <span>Cada <strong>punto es una obra de arte</strong>. La posición refleja su carácter visual: izquierda = colores uniformes, derecha = mucha variedad; abajo = formas simples, arriba = texturas complejas.</span>
+      </li>
+      <li>
+        <span class="ayuda-num" aria-hidden="true">3</span>
+        <span><strong>Pulsa o toca</strong> en cualquier zona para fijar ese punto. Sonará una frase musical derivada de la obra más cercana. <strong>Doble click (o doble toque)</strong> abre la obra más cercana con sus controles: tocar, Tour sonoro y descripción.</span>
+      </li>
+      <li>
+        <span class="ayuda-num" aria-hidden="true">4</span>
+        <span>El panel lateral describe la <strong>obra más cercana</strong> y los parámetros sonoros activos en esa zona.</span>
+      </li>
+      <li>
+        <span class="ayuda-num" aria-hidden="true">5</span>
+        <span>Puedes usar el campo <strong>solo con sonido</strong>, sin necesidad de ver la pantalla.</span>
+      </li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+//  ARGIRA · CAMPO PERCEPTUAL v10 — ESPECIFICACIÓN DE INVARIANTES
+//
+//  Este bloque define los contratos del sistema. Son precondiciones que
+//  deben preservarse ante cualquier cambio de código. Si una invariante
+//  se rompe, la consistencia perceptual del instrumento se degrada.
+//
+//  FÍSICA (no negociable — define geometría del campo)
+//  ───────────────────────────────────────────────────
+//  F1. P-space es estático: los rangos P1_MIN/P1_MAX/P4_MIN/P4_MAX se
+//      derivan del catálogo una sola vez en runtime. No cambian durante
+//      la sesión. Si el catálogo se amplia en sesión, se requiere flush
+//      completo de anchorHistory (sus nodos están normalizados contra
+//      los rangos del momento del push, no contra rangos futuros).
+//
+//  F2. query(p1, p4) es función pura: no modifica estado, no depende de
+//      anchorHistory, anchorState ni hoverState. Dado (p1,p4), devuelve
+//      siempre el mismo resultado con el mismo catálogo. Esta propiedad
+//      garantiza reproducibilidad del campo entre sesiones y usuarios.
+//
+//  F3. _historyDistP usa normP1/normP4 globales. Si F1 se rompe,
+//      _historyDistP produce distancias inconsistentes entre nodos
+//      empujados antes y después del cambio de rango → "ghost nodes".
+//
+//  MEMORIA (capa fenomenológica — no input del kernel)
+//  ────────────────────────────────────────────────────
+//  M1. anchorHistory es traza del observador, no deformación del campo.
+//      Ninguna función de query, kernel o síntesis puede leerla.
+//      Su único rol es visual (drawHistory) y de thinning interno.
+//
+//  M2. HISTORY_MIN_DIST define la resolución mínima de la memoria
+//      espacial. Reducirlo aumenta densidad de trayectoria pero puede
+//      saturar el soft cap y degradar el thinning. Valor actual: 0.08.
+//
+//  M3. nodeAlpha(i) usa t = i/(n-1), nunca i ni i/HISTORY_MAX.
+//      Razón: t debe ser [0,1] independiente del tamaño de history.
+//      i absoluto → decay explosivo al insertar nodos.
+//      i/HISTORY_MAX → underflow cuando n < HISTORY_MAX.
+//
+//  EVENTOS (discretos — separados del continuo)
+//  ─────────────────────────────────────────────
+//  E1. hoverState en setAnchorFromHover es siempre resultado de al menos
+//      un frame completo de query(). Garantizado por el buffer de input:
+//      onMove escribe en ptrBuf (productor puro), rafLoop consume y
+//      resuelve query() antes de asignar hoverState (consumidor único).
+//      pointerup llega después del frame → hoverState ya es estable.
+//
+//  E2. commit = snapshot inmutable de hoverState en el instante del tap.
+//      Una vez creado, ningún cambio de hoverState, cursor o catálogo
+//      lo modifica. Visual y audio derivan del mismo objeto commit.
+//
+//  E3. playAnchor no lee hoverState ni anchorHistory. Solo usa commit.
+//      Esto garantiza que el audio de un evento es reproducible dado
+//      el mismo commit, independientemente del estado del cursor.
+//
+//  AUDIO (dos capas con contratos de no-interferencia)
+//  ────────────────────────────────────────────────────
+//  A1. Capa 1 (fieldOsc): función de hoverState + entropía local.
+//      Nunca lee anchorState ni commit. Se inicia en primer pointerdown,
+//      se detiene en pointerleave/cancel/hidden. No tiene memoria.
+//
+//  A2. Capa 2 (playAnchor/currentSource): función exclusiva del commit.
+//      No modifica parámetros de Capa 1. La única interacción permitida
+//      es jerárquica: commit duckea gain de Capa 1 (playAnchor → duck,
+//      onended → restore). Esta asimetría (duck rápido, restore lento)
+//      preserva la sensación de "campo que cede ante evento".
+//
+//  A3. La entropía es variable de estructura temporal (modFreq, modDepth),
+//      no de energía global. La ganancia maestra de Capa 1 varía en rango
+//      estrecho [0.04, 0.08] — suficiente para percepción en altavoz,
+//      insuficiente para dominar sobre Capa 2. Si se amplía este rango,
+//      verificar jerarquía perceptual en hardware de baja fidelidad.
+//
+//  EPISTEMOLOGÍA (capas de presentación — no afectan física)
+//  ──────────────────────────────────────────────────────────
+//  P1. drawCursorHalo codifica entropía como temperatura visual (color
+//      cálido→frío) y geometría (radio, midStop). No introduce categorías
+//      discretas. Si en el futuro se añade texto o iconografía sobre el
+//      halo, se rompe la propiedad de "señal sin categoría".
+//
+//  P2. drawField() es estático entre resizes. El campo de densidad de
+//      fondo no responde al cursor ni a anchorHistory. Cualquier layer
+//      que añada dinámica al campo de fondo cambia su semántica de
+//      "distribución objetiva del catálogo" a "respuesta al usuario".
+//
+//  P3. Las capas de render son aditivas y sin side effects:
+//      drawField → drawCursorHalo → drawAxes → drawConnections →
+//      drawWorks → drawHistory → drawAnchor → drawCursor.
+//      Ninguna función de render modifica estado del motor.
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════
+//  DOM CONTRACT — checklist de mantenimiento estructural
+//
+//  Al añadir cualquier elemento interactivo, verificar:
+//
+//  D1. Todo getElementById tiene un ID existente en el HTML.
+//      IDs activos: map, mapWrap, panel, panel-toggle-btn, cP1, cP4,
+//      cDist, dominantTitle, dominantScore, dWeight, dDist, neighbours,
+//      sonicGrid, regionText, anchorSection, anchorTitle, anchorImg,
+//      anchorImgWrap, pinnedState, pinnedTitle, modeLabel, status,
+//      descBar, descToggle, descContent, sr-announcer, btn-ayuda,
+//      ayuda-modal, ayuda-backdrop, ayuda-close, ayuda-audio-btn,
+//      ayuda-audio-label, ayuda-audio-icon, app.
+//
+//  D2. Todo tabindex="-1" tiene al menos un focus path documentado.
+//      Activo: #panel (destino del skip link #skip-to-panel).
+//
+//  D3. Todo ID no referenciado se considera dead code — eliminar.
+//
+//  D4. Todo overlay (modal, drawer, tooltip) vive fuera de #app,
+//      para que elApp.inert = true no lo bloquee.
+//      Overlays actuales: #ayuda-modal (hermano de #app en <body>).
+//      #ayuda-backdrop vive dentro de #app — es puramente visual,
+//      no requiere interacción independiente del modal.
+//
+//  D5. Skip links: dos patrones distintos, no intercambiables:
+//      #skip-to-museum → gateway externo (portal al contexto padre)
+//      #skip-to-panel  → skip link intra-app (WCAG 2.4.1)
+// ══════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+//  CATÁLOGO — 96 obras canónicas (coordenadas R⁶)
+// ══════════════════════════════════════════════════════
+const CATALOGUE = [{"id":"1280px-Idylle","P1":2.2971,"P2":0.4436,"P3":0.193,"P4":1.8098,"P5":0.5206,"P6":-0.0234,"freq":314.2,"tempo":110.3,"decay":0.5573,"mod_depth":252.8,"mod_rate":8.7745},{"id":"1280px-Korenveld_Van_Gogh","P1":2.9593,"P2":0.2297,"P3":0.1502,"P4":1.904,"P5":0.6878,"P6":0.0086,"freq":388.9,"tempo":111.5,"decay":0.5003,"mod_depth":268.4,"mod_rate":7.9188},{"id":"Klimt \u00b7 Filosof\u00eda","P1":2.0833,"P2":0.2472,"P3":0.1721,"P4":1.874,"P5":0.5835,"P6":0.0552,"freq":293.3,"tempo":110.7,"decay":0.5294,"mod_depth":263.5,"mod_rate":7.9887},{"id":"Hopper \u00b7 Morning Sun","P1":3.9056,"P2":0.1987,"P3":0.1954,"P4":1.805,"P5":0.1327,"P6":-0.0727,"freq":527.4,"tempo":109.9,"decay":0.5605,"mod_depth":210.6,"mod_rate":3.3872},{"id":"Kandinsky \u00b7 Jaune Rouge Bleu","P1":4.2161,"P2":0.291,"P3":0.1885,"P4":1.8568,"P5":0.2163,"P6":-0.0339,"freq":582.8,"tempo":107.9,"decay":0.5513,"mod_depth":228.6,"mod_rate":4.76},{"id":"Rembrandt \u00b7 Self-Portrait","P1":1.0383,"P2":0.0231,"P3":0.1195,"P4":1.7237,"P5":0.0562,"P6":-0.1009,"freq":209.5,"tempo":99.6,"decay":0.4593,"mod_depth":188.4,"mod_rate":1.7665},{"id":"Turner \u00b7 Barco de esclavos","P1":1.7102,"P2":0.0336,"P3":0.2013,"P4":1.7765,"P5":0.2259,"P6":0.125,"freq":260.1,"tempo":101.7,"decay":0.5685,"mod_depth":216.3,"mod_rate":3.8449},{"id":"Monet \u00b7 Cliff Walk Pourville","P1":4.008,"P2":0.2028,"P3":0.1146,"P4":1.8998,"P5":0.4653,"P6":-0.0233,"freq":545.1,"tempo":100.3,"decay":0.4527,"mod_depth":263.8,"mod_rate":7.3944},{"id":"Monet \u00b7 Almiar Efecto Nieve","P1":4.2316,"P2":0.2429,"P3":0.1307,"P4":1.8624,"P5":0.3461,"P6":0.0521,"freq":585.7,"tempo":109.8,"decay":0.4742,"mod_depth":244.2,"mod_rate":6.1252},{"id":"Dal\u00ed \u00b7 Perfil del tiempo","P1":4.4437,"P2":0.2253,"P3":0.2405,"P4":1.81,"P5":0.4365,"P6":0.0471,"freq":627.1,"tempo":111.3,"decay":0.6206,"mod_depth":245.7,"mod_rate":7.1395},{"id":"Delacroix \u00b7 Dante y Virgilio","P1":3.1845,"P2":0.3479,"P3":0.1624,"P4":1.7236,"P5":0.1682,"P6":-0.0871,"freq":418.1,"tempo":113.4,"decay":0.5166,"mod_depth":201.0,"mod_rate":4.41},{"id":"Vel\u00e1zquez \u00b7 Vieja friendo huevos","P1":3.3358,"P2":0.1204,"P3":0.2576,"P4":1.7248,"P5":0.2887,"P6":0.1579,"freq":439.0,"tempo":104.5,"decay":0.6435,"mod_depth":214.8,"mod_rate":4.9458},{"id":"Vel\u00e1zquez \u00b7 Venus Rokeby","P1":3.5099,"P2":0.3099,"P3":0.1723,"P4":1.7513,"P5":0.1518,"P6":-0.121,"freq":464.3,"tempo":115.0,"decay":0.5298,"mod_depth":203.8,"mod_rate":4.0605},{"id":"Degas \u00b7 Interior","P1":2.1,"P2":0.0548,"P3":0.1347,"P4":1.7684,"P5":0.1731,"P6":-0.0628,"freq":294.9,"tempo":102.7,"decay":0.4796,"mod_depth":209.0,"mod_rate":3.2964},{"id":"Degas \u00b7 Familia Bellelli","P1":3.823,"P2":0.308,"P3":0.1687,"P4":1.814,"P5":0.2409,"P6":-0.0995,"freq":513.5,"tempo":115.0,"decay":0.5249,"mod_depth":224.2,"mod_rate":5.1223},{"id":"Degas \u00b7 La clase de ballet","P1":2.314,"P2":0.1545,"P3":0.1482,"P4":1.8605,"P5":0.3743,"P6":0.0511,"freq":315.9,"tempo":103.2,"decay":0.4976,"mod_depth":247.0,"mod_rate":6.1096},{"id":"Degas \u00b7 Ensayo de ballet","P1":1.4833,"P2":0.0304,"P3":0.1954,"P4":1.8022,"P5":0.2437,"P6":0.017,"freq":241.8,"tempo":101.5,"decay":0.5605,"mod_depth":222.6,"mod_rate":4.0466},{"id":"Degas \u00b7 Chass\u00e9 de danse","P1":1.2084,"P2":0.0332,"P3":0.1584,"P4":1.8455,"P5":0.1438,"P6":0.0588,"freq":221.3,"tempo":101.7,"decay":0.5112,"mod_depth":218.6,"mod_rate":2.8587},{"id":"Degas \u00b7 Dancers pink and green","P1":4.3296,"P2":0.2631,"P3":0.1551,"P4":1.8716,"P5":0.7211,"P6":-0.0418,"freq":604.5,"tempo":106.9,"decay":0.5068,"mod_depth":263.1,"mod_rate":8.0526},{"id":"Munch \u00b7 El Grito","P1":3.0357,"P2":0.2412,"P3":0.1372,"P4":1.8446,"P5":0.262,"P6":-0.0027,"freq":398.6,"tempo":104.7,"decay":0.483,"mod_depth":231.7,"mod_rate":5.1093},{"id":"Rembrandt \u00b7 El hijo pr\u00f3digo","P1":1.9796,"P2":0.0857,"P3":0.1648,"P4":1.6376,"P5":0.1605,"P6":-0.1777,"freq":283.7,"tempo":97.5,"decay":0.5197,"mod_depth":185.9,"mod_rate":3.2692},{"id":"Degas \u00b7 El ajenjo","P1":2.5754,"P2":0.2925,"P3":0.2304,"P4":1.8364,"P5":0.2233,"P6":-0.0374,"freq":343.7,"tempo":114.6,"decay":0.6072,"mod_depth":226.0,"mod_rate":4.8501},{"id":"Seurat \u00b7 La Grande Jatte","P1":4.7434,"P2":0.2642,"P3":0.1332,"P4":1.8159,"P5":0.4667,"P6":-0.0894,"freq":690.6,"tempo":113.2,"decay":0.4776,"mod_depth":250.1,"mod_rate":7.6569},{"id":"Goya \u00b7 Maja desnuda","P1":4.1909,"P2":0.3367,"P3":0.2457,"P4":1.688,"P5":0.1897,"P6":0.0647,"freq":578.1,"tempo":111.3,"decay":0.6276,"mod_depth":197.6,"mod_rate":4.6236},{"id":"Klimt \u00b7 Flores de jard\u00edn","P1":2.8139,"P2":0.2475,"P3":0.2591,"P4":1.8701,"P5":0.4603,"P6":-0.0454,"freq":371.1,"tempo":112.4,"decay":0.6455,"mod_depth":258.3,"mod_rate":7.5141},{"id":"Klimt \u00b7 046","P1":1.8253,"P2":0.1324,"P3":0.1839,"P4":1.9153,"P5":0.7494,"P6":0.0463,"freq":269.9,"tempo":106.6,"decay":0.5453,"mod_depth":270.3,"mod_rate":7.5294},{"id":"Klimt \u00b7 El ciego","P1":3.4176,"P2":0.2857,"P3":0.1117,"P4":1.6802,"P5":0.1072,"P6":0.0026,"freq":450.7,"tempo":110.1,"decay":0.4489,"mod_depth":186.9,"mod_rate":3.4295},{"id":"Klimt \u00b7 La Medicina","P1":4.0728,"P2":0.3652,"P3":0.1794,"P4":1.8533,"P5":0.3289,"P6":-0.1023,"freq":556.5,"tempo":115.0,"decay":0.5392,"mod_depth":240.7,"mod_rate":6.4076},{"id":"Klimt \u00b7 Tranquil Pond","P1":3.0742,"P2":0.2917,"P3":0.1733,"P4":1.7719,"P5":0.1176,"P6":0.1714,"freq":403.5,"tempo":114.6,"decay":0.5311,"mod_depth":203.4,"mod_rate":3.578},{"id":"Vermeer \u00b7 La lechera","P1":3.2732,"P2":0.2118,"P3":0.2227,"P4":1.774,"P5":0.1464,"P6":0.314,"freq":430.2,"tempo":110.6,"decay":0.5969,"mod_depth":207.0,"mod_rate":3.6038},{"id":"Turner \u00b7 Casas del Parlamento","P1":2.2915,"P2":0.1022,"P3":0.2014,"P4":1.8678,"P5":0.3825,"P6":-0.0002,"freq":313.7,"tempo":105.1,"decay":0.5686,"mod_depth":249.2,"mod_rate":5.9985},{"id":"Turner \u00b7 Pescadores en el mar","P1":3.4666,"P2":0.1408,"P3":0.1501,"P4":1.712,"P5":0.1035,"P6":-0.1927,"freq":457.9,"tempo":104.8,"decay":0.5001,"mod_depth":191.8,"mod_rate":2.8056},{"id":"Caravaggio \u00b7 Judith","P1":3.2563,"P2":0.2923,"P3":0.2457,"P4":1.596,"P5":0.3467,"P6":0.0855,"freq":427.9,"tempo":105.4,"decay":0.6276,"mod_depth":200.0,"mod_rate":6.3295},{"id":"Klimt \u00b7 Jurisprudencia","P1":3.1357,"P2":0.4006,"P3":0.2554,"P4":1.7901,"P5":0.4421,"P6":0.1257,"freq":411.6,"tempo":115.0,"decay":0.6406,"mod_depth":243.0,"mod_rate":7.9076},{"id":"Kandinsky \u00b7 Composici\u00f3n 8","P1":2.2632,"P2":0.1169,"P3":0.218,"P4":1.9001,"P5":0.2618,"P6":0.0147,"freq":310.8,"tempo":98.3,"decay":0.5906,"mod_depth":240.9,"mod_rate":4.6095},{"id":"Malevich \u00b7 Cuadrado negro","P1":2.7376,"P2":0.2338,"P3":0.2899,"P4":1.7911,"P5":0.2259,"P6":0.0043,"freq":362.1,"tempo":111.7,"decay":0.6865,"mod_depth":218.8,"mod_rate":4.6466},{"id":"Rembrandt \u00b7 La ronda de noche","P1":2.2288,"P2":0.078,"P3":0.1735,"P4":1.7125,"P5":0.3037,"P6":0.0639,"freq":307.4,"tempo":101.7,"decay":0.5314,"mod_depth":214.5,"mod_rate":4.9558},{"id":"Matisse \u00b7 La Danza II","P1":3.0765,"P2":0.2673,"P3":0.1522,"P4":1.8126,"P5":0.2743,"P6":0.0124,"freq":403.8,"tempo":107.6,"decay":0.5029,"mod_depth":227.8,"mod_rate":5.3612},{"id":"Matisse \u00b7 La habitaci\u00f3n roja","P1":3.5454,"P2":0.3358,"P3":0.2111,"P4":1.7211,"P5":0.4182,"P6":-0.0502,"freq":469.6,"tempo":113.3,"decay":0.5815,"mod_depth":228.8,"mod_rate":7.3618},{"id":"Rembrandt \u00b7 La novia jud\u00eda","P1":1.7979,"P2":0.0991,"P3":0.157,"P4":1.6158,"P5":0.1619,"P6":-0.0777,"freq":267.6,"tempo":96.9,"decay":0.5094,"mod_depth":182.4,"mod_rate":3.3391},{"id":"Vel\u00e1zquez \u00b7 Las Meninas","P1":2.3111,"P2":0.0858,"P3":0.154,"P4":1.7215,"P5":0.1775,"P6":-0.0731,"freq":315.6,"tempo":102.6,"decay":0.5054,"mod_depth":201.7,"mod_rate":3.4736},{"id":"Turner \u00b7 La tormenta en el mar","P1":3.7172,"P2":0.2936,"P3":0.2288,"P4":1.6805,"P5":0.1665,"P6":-0.3166,"freq":496.4,"tempo":110.5,"decay":0.605,"mod_depth":193.7,"mod_rate":4.1723},{"id":"Goya \u00b7 La vendimia","P1":3.3046,"P2":0.2046,"P3":0.2001,"P4":1.7963,"P5":0.1895,"P6":-0.0499,"freq":434.6,"tempo":110.2,"decay":0.5667,"mod_depth":215.5,"mod_rate":4.0929},{"id":"Rembrandt \u00b7 Lecci\u00f3n de anatom\u00eda","P1":2.1137,"P2":0.1419,"P3":0.1922,"P4":1.6448,"P5":0.1827,"P6":-0.1461,"freq":296.2,"tempo":100.8,"decay":0.5562,"mod_depth":189.6,"mod_rate":3.76},{"id":"Da Vinci \u00b7 Mona Lisa","P1":3.0218,"P2":0.1009,"P3":0.1608,"P4":1.7801,"P5":0.2465,"P6":-0.0172,"freq":396.8,"tempo":105.0,"decay":0.5144,"mod_depth":219.3,"mod_rate":4.3616},{"id":"Matisse \u00b7 Mujer con sombrero","P1":4.3766,"P2":0.285,"P3":0.1695,"P4":1.8867,"P5":0.5019,"P6":0.0101,"freq":613.7,"tempo":114.2,"decay":0.5261,"mod_depth":265.6,"mod_rate":8.14},{"id":"Vermeer \u00b7 Chica con pendiente de perla","P1":2.4095,"P2":0.2767,"P3":0.2684,"P4":1.8332,"P5":0.2307,"P6":0.2348,"freq":325.8,"tempo":113.8,"decay":0.6579,"mod_depth":226.3,"mod_rate":4.8755},{"id":"Hopper \u00b7 Nighthawks","P1":4.1602,"P2":0.1921,"P3":0.2223,"P4":1.6198,"P5":0.1477,"P6":0.0881,"freq":572.4,"tempo":101.8,"decay":0.5965,"mod_depth":181.5,"mod_rate":3.5402},{"id":"C\u00e9zanne \u00b7 Madame C\u00e9zanne","P1":3.6711,"P2":0.2194,"P3":0.21,"P4":1.8286,"P5":0.3311,"P6":-0.0406,"freq":489.0,"tempo":111.0,"decay":0.58,"mod_depth":236.8,"mod_rate":5.8508},{"id":"C\u00e9zanne \u00b7 Monta\u00f1a Sainte-Victoire","P1":4.0438,"P2":0.1871,"P3":0.1381,"P4":1.8396,"P5":0.2262,"P6":0.0549,"freq":551.4,"tempo":109.3,"decay":0.4841,"mod_depth":226.9,"mod_rate":4.4629},{"id":"C\u00e9zanne \u00b7 Cesto de manzanas","P1":3.8056,"P2":0.1437,"P3":0.1948,"P4":1.8154,"P5":0.2745,"P6":0.0775,"freq":510.7,"tempo":107.2,"decay":0.5598,"mod_depth":228.3,"mod_rate":4.8688},{"id":"Renoir \u00b7 Moulin de la Galette","P1":4.184,"P2":0.2527,"P3":0.2193,"P4":1.8626,"P5":0.608,"P6":-0.0636,"freq":576.8,"tempo":112.3,"decay":0.5923,"mod_depth":261.6,"mod_rate":8.011},{"id":"Vel\u00e1zquez \u00b7 Retrato Juan Pareja","P1":1.7997,"P2":0.0333,"P3":0.1251,"P4":1.7593,"P5":0.0823,"P6":0.1475,"freq":267.7,"tempo":101.7,"decay":0.4667,"mod_depth":197.3,"mod_rate":2.1209},{"id":"Monet \u00b7 Catedral de Ru\u00e1n","P1":3.1637,"P2":0.3644,"P3":0.1974,"P4":1.8354,"P5":0.5801,"P6":-0.034,"freq":415.3,"tempo":108.7,"decay":0.5632,"mod_depth":257.1,"mod_rate":8.4577},{"id":"Botticelli \u00b7 El nacimiento de Venus","P1":2.9446,"P2":0.1027,"P3":0.2541,"P4":1.8581,"P5":0.5181,"P6":-0.1173,"freq":387.1,"tempo":105.1,"decay":0.6388,"mod_depth":260.8,"mod_rate":7.4109},{"id":"Rousseau \u00b7 Sorprendida","P1":2.3933,"P2":0.0566,"P3":0.1605,"P4":1.8578,"P5":0.4988,"P6":-0.045,"freq":324.1,"tempo":101.5,"decay":0.514,"mod_depth":260.6,"mod_rate":7.2122},{"id":"Rembrandt \u00b7 El abanderado","P1":1.6546,"P2":0.0868,"P3":0.2065,"P4":1.6575,"P5":0.2244,"P6":-0.1801,"freq":255.5,"tempo":98.8,"decay":0.5753,"mod_depth":196.4,"mod_rate":4.0397},{"id":"Turner \u00b7 El Temerario","P1":2.4053,"P2":0.147,"P3":0.1051,"P4":1.8727,"P5":0.0875,"P6":-0.0452,"freq":325.4,"tempo":107.3,"decay":0.4401,"mod_depth":216.7,"mod_rate":2.6383},{"id":"Turner \u00b7 Temerario (alt)","P1":2.2865,"P2":0.1565,"P3":0.1199,"P4":1.8771,"P5":0.1013,"P6":0.0055,"freq":313.1,"tempo":107.8,"decay":0.4599,"mod_depth":219.0,"mod_rate":2.8415},{"id":"Turner \u00b7 Dido construyendo Cartago","P1":2.6911,"P2":0.0793,"P3":0.2001,"P4":1.8004,"P5":0.1613,"P6":-0.1316,"freq":356.7,"tempo":104.0,"decay":0.5668,"mod_depth":213.0,"mod_rate":3.2527},{"id":"Turner \u00b7 Lluvia Vapor Velocidad","P1":2.0284,"P2":0.0751,"P3":0.1372,"P4":1.8935,"P5":0.1813,"P6":-0.035,"freq":288.2,"tempo":103.8,"decay":0.4829,"mod_depth":230.8,"mod_rate":3.4766},{"id":"Van Gogh \u00b7 Noche estrellada","P1":3.7064,"P2":0.1706,"P3":0.2007,"P4":1.8355,"P5":0.7113,"P6":0.097,"freq":494.6,"tempo":108.5,"decay":0.5676,"mod_depth":257.1,"mod_rate":7.6823},{"id":"Vel\u00e1zquez \u00b7 Las lanzas","P1":3.9799,"P2":0.2415,"P3":0.1867,"P4":1.8167,"P5":0.4643,"P6":-0.0158,"freq":540.1,"tempo":112.1,"decay":0.549,"mod_depth":249.9,"mod_rate":7.5379},{"id":"Malevich \u00b7 Blanco sobre blanco","P1":1.0866,"P2":0.0165,"P3":0.0393,"P4":1.9164,"P5":0.0936,"P6":0.0081,"freq":212.8,"tempo":86.9,"decay":0.3523,"mod_depth":224.7,"mod_rate":2.1893},{"id":"Caravaggio \u00b7 Baco","P1":2.6255,"P2":0.3282,"P3":0.247,"P4":1.7131,"P5":0.3204,"P6":-0.1245,"freq":349.3,"tempo":112.8,"decay":0.6293,"mod_depth":216.5,"mod_rate":6.1582},{"id":"Monet \u00b7 Impression soleil levant","P1":4.0824,"P2":0.2842,"P3":0.0821,"P4":1.8207,"P5":0.1237,"P6":0.0056,"freq":558.3,"tempo":102.2,"decay":0.4095,"mod_depth":212.2,"mod_rate":3.6209},{"id":"Goya \u00b7 Saturno","P1":3.1754,"P2":0.2398,"P3":0.1435,"P4":1.715,"P5":0.2674,"P6":0.094,"freq":416.9,"tempo":109.9,"decay":0.4913,"mod_depth":210.8,"mod_rate":5.1675},{"id":"Caravaggio \u00b7 La cabeza de Medusa","P1":3.7267,"P2":0.2825,"P3":0.3233,"P4":1.6599,"P5":0.2799,"P6":-0.0313,"freq":497.9,"tempo":108.7,"decay":0.7,"mod_depth":203.0,"mod_rate":5.4883},{"id":"Caravaggio \u00b7 La captura de Cristo","P1":3.8877,"P2":0.3044,"P3":0.143,"P4":1.6236,"P5":0.1972,"P6":-0.0482,"freq":524.4,"tempo":107.4,"decay":0.4906,"mod_depth":187.7,"mod_rate":4.5844},{"id":"Caravaggio \u00b7 La vocaci\u00f3n de San Mateo","P1":2.7817,"P2":0.2433,"P3":0.1951,"P4":1.6806,"P5":0.2003,"P6":0.2255,"freq":367.3,"tempo":108.0,"decay":0.5602,"mod_depth":197.5,"mod_rate":4.3772},{"id":"Goya \u00b7 Fusilamientos 3 de mayo","P1":2.3727,"P2":0.0705,"P3":0.1864,"P4":1.7716,"P5":0.2123,"P6":-0.1979,"freq":322.0,"tempo":103.5,"decay":0.5485,"mod_depth":214.0,"mod_rate":3.8298},{"id":"Caravaggio \u00b7 Narciso","P1":3.354,"P2":0.4376,"P3":0.2323,"P4":1.6038,"P5":0.2368,"P6":0.0538,"freq":441.6,"tempo":106.2,"decay":0.6097,"mod_depth":188.9,"mod_rate":5.5921},{"id":"C\u00e9zanne \u00b7 Tulipanes","P1":4.4778,"P2":0.2413,"P3":0.3195,"P4":1.8291,"P5":0.3728,"P6":0.0934,"freq":634.0,"tempo":112.1,"decay":0.7,"mod_depth":241.7,"mod_rate":6.4382}];
+
+// ══════════════════════════════════════════════════════
+//  RANGOS derivados del catálogo (recalculados en runtime)
+// ══════════════════════════════════════════════════════
+const P1_MIN = Math.min(...CATALOGUE.map(o => o.P1));
+const P1_MAX = Math.max(...CATALOGUE.map(o => o.P1));
+const P4_MIN = Math.min(...CATALOGUE.map(o => o.P4));
+const P4_MAX = Math.max(...CATALOGUE.map(o => o.P4));
+
+// Exponer al ámbito global para que map-explorer.js los encuentre en window.*
+window.CATALOGUE = CATALOGUE;
+window.P1_MIN = P1_MIN;
+window.P1_MAX = P1_MAX;
+window.P4_MIN = P4_MIN;
+window.P4_MAX = P4_MAX;
+
+// ══════════════════════════════════════════════════════
+//  MOTOR PERCEPTUAL — kernel gaussiano
+// ══════════════════════════════════════════════════════
+const SIGMA = 0.18;
+const K     = 7;
+
+// ══════════════════════════════════════════════════════
+//  CONFIG RESPONSIVO — un solo motor, parametrizado
+// ══════════════════════════════════════════════════════
+const IS_MOBILE = matchMedia('(max-width: 700px) or (pointer: coarse)').matches;
+
+const CONFIG = {
+  step:            IS_MOBILE ? 14  : 8,     // paso del grid de campo
+  duration:        IS_MOBILE ? 4.5 : 8.0,   // segundos de buffer de audio
+  densityThresh:   IS_MOBILE ? 0.01 : 0.005, // umbral de dibujado del campo
+  labelThresh:     IS_MOBILE ? 0.40 : 0.28,  // umbral para etiquetas de obras
+};
+
+function normP1(v) { return (v - P1_MIN) / (P1_MAX - P1_MIN); }
+function normP4(v) { return (v - P4_MIN) / (P4_MAX - P4_MIN); }
+
+function dist2(aP1, aP4, bP1, bP4) {
+  const dx = normP1(aP1) - normP1(bP1);
+  const dy = normP4(aP4) - normP4(bP4);
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function query(p1, p4) {
+  const dists = CATALOGUE.map(w => ({
+    obra: w,
+    d: dist2(p1, p4, w.P1, w.P4),
+  })).sort((a, b) => a.d - b.d).slice(0, K);
+
+  const raw   = dists.map(n => Math.exp(-(n.d*n.d) / (2*SIGMA*SIGMA)));
+  const total = raw.reduce((s,v) => s+v, 0);
+  const weights = raw.map(v => v / total);
+
+  const neighbours = dists.map((n, i) => ({ obra: n.obra, d: n.d, w: weights[i] }));
+
+  // Interpolación de parámetros sónicos
+  const sonic = {
+    freq:      neighbours.reduce((s,n) => s + n.obra.freq      * n.w, 0),
+    tempo:     neighbours.reduce((s,n) => s + n.obra.tempo     * n.w, 0),
+    decay:     neighbours.reduce((s,n) => s + n.obra.decay     * n.w, 0),
+    mod_depth: neighbours.reduce((s,n) => s + n.obra.mod_depth * n.w, 0),
+    mod_rate:  neighbours.reduce((s,n) => s + n.obra.mod_rate  * n.w, 0),
+  };
+
+  return { neighbours, sonic };
+}
+
+// ══════════════════════════════════════════════════════
+//  MOTOR DE AUDIO — pipeline v3.4 inline
+//  sonicParamsV35 + synthesizeV35 autocontenidos.
+//  No requiere script_v34.js externo.
+// ══════════════════════════════════════════════════════
+
+let audioCtx = null;
+let currentSource = null;
+
+// Estado dual: hover cambia continuamente, anchor se fija por click
+let hoverState  = null;   // { p1, p2, p3, p4, p5, p6, label }
+let anchorState = null;   // commit más reciente (fijado por click)
+
+// Historia de anchors — memoria de trayectoria perceptual
+// Cada entrada es un commit object: { p1, p4, label, t }
+// Controles de saturación:
+//   HISTORY_MAX:      máximo de nodos en memoria
+//   HISTORY_MIN_DIST: thinning espacial — distancia P-space mínima entre nodos
+//   HISTORY_ALPHA_LO: opacidad del nodo más antiguo (el reciente siempre al 1.0)
+const HISTORY_MAX      = 12;
+const HISTORY_MIN_DIST = 0.08;
+const HISTORY_ALPHA_LO = 0.12;
+let anchorHistory = [];  // [commit_más_antiguo, ..., commit_más_reciente]
+
+// ── Audio continuo del campo — Capa 1 ────────────────────
+// Oscilador vivo que responde al movimiento del cursor en tiempo real.
+// Completamente autónomo del sistema de commits (playAnchor / Capa 2).
+// Diseñado para altavoz móvil: la entropía modula estructura temporal
+// (envelope rate, modulación rítmica), no timbre — robusto en hardware pequeño.
+//
+// Separación de capas:
+//   Capa 1 (fieldOsc): presencia continua del campo — "estoy en un espacio"
+//   Capa 2 (playAnchor): evento de commit — "he marcado este punto"
+// Los dos osciladores coexisten sin interferir en parámetros del otro.
+
+let fieldOsc    = null;  // OscillatorNode — portadora del campo
+let fieldMod    = null;  // OscillatorNode — modulador de amplitud (envelope rítmico)
+let fieldModGain= null;  // GainNode — profundidad de modulación
+let fieldGain   = null;  // GainNode — ganancia maestra de capa 1
+let fieldDC     = null;  // ConstantSourceNode — DC offset para AM rectificada
+let fieldDCGain = null;  // GainNode — escala DC offset
+let fieldAMGain = null;  // GainNode — suma modulador + DC → controla ganancia portadora
+let fieldActive = false; // true cuando el oscilador está corriendo
+
+// Inicia el oscilador continuo la primera vez que hay hoverState válido.
+// Solo se llama una vez — después los parámetros se actualizan frame a frame.
+function _startFieldOsc() {
+  if (!audioCtx || fieldActive) return;
+
+  fieldOsc = audioCtx.createOscillator();
+  fieldOsc.type = 'sine';
+  fieldOsc.frequency.value = 220;
+
+  fieldMod = audioCtx.createOscillator();
+  fieldMod.type = 'sine';
+  fieldMod.frequency.value = 1.2;
+
+  fieldModGain = audioCtx.createGain();
+  fieldModGain.gain.value = 0.25;
+
+  // DC offset rectifica AM — ganancia siempre positiva en Chrome Android
+  fieldDC = audioCtx.createConstantSource();
+  fieldDC.offset.value = 1.0;
+
+  fieldDCGain = audioCtx.createGain();
+  fieldDCGain.gain.value = 0.5; // escala [0,2] → [0,1]
+
+  // Suma modulador + DC controla ganancia de la portadora
+  fieldAMGain = audioCtx.createGain();
+  fieldAMGain.gain.value = 0;
+
+  fieldGain = audioCtx.createGain();
+  fieldGain.gain.setValueAtTime(0, audioCtx.currentTime);
+  fieldGain.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + 0.8);
+
+  // Grafo: (fieldMod→fieldModGain) + (fieldDC→fieldDCGain) → fieldAMGain.gain
+  //        fieldOsc → fieldAMGain → fieldGain → destination
+  fieldMod.connect(fieldModGain);
+  fieldModGain.connect(fieldAMGain.gain);
+  fieldDC.connect(fieldDCGain);
+  fieldDCGain.connect(fieldAMGain.gain);
+
+  fieldOsc.connect(fieldAMGain);
+  fieldAMGain.connect(fieldGain);
+  fieldGain.connect(audioCtx.destination);
+
+  fieldDC.start();
+  fieldOsc.start();
+  fieldMod.start();
+  fieldActive = true;
+  _syncDetenerBtn();
+}
+
+// Detiene y libera todos los nodos — simétrico con _startFieldOsc.
+function _stopFieldOsc() {
+  if (!fieldActive) return;
+  const now = audioCtx?.currentTime ?? 0;
+  try {
+    fieldGain.gain.setTargetAtTime(0, now, 0.3);
+    setTimeout(() => {
+      try { fieldOsc.stop();  } catch(e) {}
+      try { fieldMod.stop();  } catch(e) {}
+      try { fieldDC.stop();   } catch(e) {}
+      fieldOsc = fieldMod = fieldModGain = null;
+      fieldDC  = fieldDCGain = fieldAMGain = null;
+      fieldGain   = null;
+      fieldActive = false;
+    }, 900);
+  } catch(e) {
+    fieldActive = false;
+  }
+}
+
+// Actualiza parámetros del oscilador continuo desde hoverState + entropía.
+// Llamado cada frame desde rafLoop — usa setTargetAtTime para evitar clicks.
+// timeConstant controla suavidad: 0.08s = respuesta rápida pero sin zipper noise.
+function _updateFieldOsc(hs, entropy) {
+  if (!fieldActive || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  const tc  = 0.08;
+
+  const hue_norm = Math.max(0, Math.min(1, hs.p1 / 5.2));
+  const freq = 80 + hue_norm * 120;
+  fieldOsc.frequency.setTargetAtTime(freq, now, tc);
+
+  const modFreq = 0.6 + entropy * 2.2;
+  fieldMod.frequency.setTargetAtTime(modFreq, now, tc * 2);
+
+  // Profundidad AM — con DC offset el rango de ganancia es [0.5-depth, 0.5+depth]
+  // Nunca negativo: depth máximo 0.45 deja mínimo 0.05
+  const modDepth = 0.15 + entropy * 0.20;
+  fieldModGain.gain.setTargetAtTime(modDepth, now, tc);
+
+  // Ganancia maestra — subida a niveles audibles en altavoces de móvil
+  const rawGain    = 0.15 + entropy * 0.10;           // [0.15, 0.25]
+  const masterGain = currentSource
+    ? Math.min(rawGain, 0.08 + entropy * 0.06)        // [0.08, 0.14] durante commit
+    : rawGain;
+  fieldGain.gain.setTargetAtTime(masterGain, now, tc * 3);
+}
+
+function _granularLayer(n, freq_base, fractal_D, sampleRate) {
+  const grain_size  = Math.floor(0.04 * sampleRate);
+  const grain_layer = new Float32Array(n);
+  const intensity   = Math.max(0, Math.min(1, (fractal_D - 1.85) / 0.15));
+  let rngState = 42n;
+  function lcg() { rngState = (rngState * 6364136223846793005n + 1442695040888963407n) & 0xFFFFFFFFFFFFFFFFn; return Number(rngState & 0xFFFFn) / 65536.0; }
+  for (let g = 0; g < n; g += grain_size) {
+    const gFreq = freq_base * (0.98 + lcg() * 0.04);
+    const gAmp  = intensity * 0.15 * lcg();
+    const gEnd  = Math.min(g + grain_size, n);
+    for (let i = g; i < gEnd; i++) {
+      const t = (i - g) / grain_size;
+      grain_layer[i] += gAmp * Math.sin(Math.PI * t) * Math.sin(2 * Math.PI * gFreq * i / sampleRate);
+    }
+  }
+  return grain_layer;
+}
+
+// Calcula sonicParams desde las 6 coordenadas del campo (v3.4 separable)
+function _computeSonic(p1, p2, p3, p4, p5, p6) {
+  const hue_entropy_norm  = Math.max(0, Math.min(1, p1 / 5.2));
+  const fractal_norm      = Math.max(0, Math.min(1, (p4 - 1.5) / 0.5));
+  const edge_density_norm = Math.max(0, Math.min(1, p5 / 0.50));
+  const lum_norm          = Math.max(0, Math.min(1, p3 / 0.3));
+  // Canal A
+  const freq_base   = 150.0 * Math.pow(800.0 / 150.0, hue_entropy_norm);
+  const odd_bias    = Math.max(0, Math.min(1, p2 * 1.5));
+  const n_harmonics = Math.floor(3 + 0.35 * 10);
+  const freq2_base  = Math.max(150.0, Math.min(1000.0, 300.0 + 600.0 * hue_entropy_norm + 175.0));
+  const osc2_weight = Math.max(0, Math.min(0.6, (p2 - 0.18) / 0.22));
+  // Canal B
+  const tempo_bpm = Math.max(40, Math.min(115,
+    70.0 + Math.max(0, Math.min(15, p2 * 50.0))
+         + 3.0
+         + Math.max(-15, Math.min(15, (p4 - 1.5) * 60.0))
+  ));
+  const mod_depth = 144.9 + edge_density_norm * 56.4 + fractal_norm * 83.1;
+  const mod_rate  = 1.0 + p2 * 4.0 + edge_density_norm * 6.0;
+  // Canal C
+  const decay     = 0.3 + lum_norm * 0.4;
+  // Espacial
+  const stereo_pan = Math.max(-1.0, Math.min(1.0, p6 * 4.0));
+  return { freq_base, freq2_base, osc2_weight, n_harmonics, odd_bias,
+           tempo_bpm, decay, mod_depth, mod_rate, stereo_pan, fractal_D: p4 };
+}
+
+function _synthesize(sp, duration = 8.0, sampleRate = 44100) {
+  const N = Math.floor(sampleRate * duration);
+  const { freq_base, freq2_base, osc2_weight, n_harmonics, mod_depth,
+          mod_rate, decay, tempo_bpm, odd_bias, stereo_pan, fractal_D } = sp;
+  const signal = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const t = i / sampleRate;
+    const mod = mod_depth * Math.sin(2 * Math.PI * mod_rate * t);
+    let s = 0;
+    for (let k = 1; k <= n_harmonics; k++) {
+      let amp = 1.0 / Math.pow(k, 1.5);
+      if (k % 2 === 0) amp *= (1.0 - odd_bias * 0.90);
+      s += amp * Math.sin(2 * Math.PI * (freq_base * k + mod) * t);
+    }
+    signal[i] = s;
+  }
+  if (fractal_D > 1.85) {
+    const gl = _granularLayer(N, freq_base, fractal_D, sampleRate);
+    for (let i = 0; i < N; i++) signal[i] += gl[i];
+  }
+  if (osc2_weight > 0) {
+    const sig2 = new Float32Array(N);
+    const nH2 = Math.min(n_harmonics, 5);
+    for (let i = 0; i < N; i++) {
+      const t = i / sampleRate;
+      const m2 = mod_depth * 0.5 * Math.sin(2 * Math.PI * mod_rate * 1.618 * t);
+      let s2 = 0;
+      for (let k = 1; k <= nH2; k++) s2 += (1.0/Math.pow(k,2.0)) * Math.sin(2*Math.PI*(freq2_base*k+m2)*t);
+      sig2[i] = s2;
+    }
+    let mx2 = 0; for (let i=0;i<N;i++) if(Math.abs(sig2[i])>mx2) mx2=Math.abs(sig2[i]);
+    if (mx2>0) for (let i=0;i<N;i++) sig2[i]/=mx2;
+    for (let i=0;i<N;i++) signal[i] = signal[i]*(1-osc2_weight*0.4) + sig2[i]*osc2_weight;
+  }
+  let mx=0; for(let i=0;i<N;i++) if(Math.abs(signal[i])>mx) mx=Math.abs(signal[i]);
+  if(mx>0) for(let i=0;i<N;i++) signal[i]/=mx;
+  // Envolvente rítmica
+  const bSamp = Math.floor((60.0/tempo_bpm)*sampleRate);
+  const atk   = Math.floor(0.02*sampleRate);
+  const rel   = Math.floor(Math.min(decay, (60.0/tempo_bpm)*0.8)*sampleRate);
+  for(let bs=0;bs<N;bs+=bSamp){
+    for(let i=0;i<atk;i++){const idx=bs+i;if(idx<N)signal[idx]*=i/atk;}
+    const be=bs+bSamp;
+    for(let i=0;i<rel;i++){const idx=be-rel+i;if(idx>=0&&idx<N)signal[idx]*=i/rel;}
+  }
+  const fade=Math.floor(0.5*sampleRate);
+  for(let i=0;i<fade;i++) signal[N-fade+i]*=1-i/(fade-1);
+  mx=0; for(let i=0;i<N;i++) if(Math.abs(signal[i])>mx) mx=Math.abs(signal[i]);
+  if(mx>0) for(let i=0;i<N;i++) signal[i]/=mx;
+  // Estéreo
+  const angle=((stereo_pan+1)/2)*(Math.PI/2);
+  const gL=Math.cos(angle), gR=Math.sin(angle);
+  const stereo=new Float32Array(2*N);
+  for(let i=0;i<N;i++){stereo[2*i]=signal[i]*gL;stereo[2*i+1]=signal[i]*gR;}
+  return stereo;
+}
+
+// schedule(fn): síntesis siempre fuera del frame crítico.
+// RAF→setTimeout garantiza: (1) el frame visual actual termina limpio,
+// (2) la síntesis empieza en el siguiente ciclo del event loop.
+// Elimina el bloqueo de _synthesize() durante el frame de commit.
+// _idle eliminado: era jitter no determinista bajo carga iOS.
+function schedule(fn) {
+  requestAnimationFrame(() => setTimeout(fn, 0));
+}
+
+// playAnchor(commit): sintetiza y reproduce desde un commit object.
+// commit = { p1..p6, label, t: performance.now() }
+// El timestamp permite compensar latencia acumulada entre commit visual y audio.
+async function playAnchor(commit) {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+  if (audioCtx.state !== 'running') {
+    try { await audioCtx.resume(); } catch(e) {}
+  }
+  if (currentSource) { try { currentSource.stop(); } catch(e){} currentSource = null; }
+
+  // Ducking del campo continuo: baja a 45% durante el commit para dar foreground
+  // al evento de síntesis. El campo no desaparece — mantiene presencia espacial.
+  // Se restaura suavemente en onended para no crear transición abrupta.
+  if (fieldActive && fieldGain) {
+    const now = audioCtx.currentTime;
+    fieldGain.gain.setTargetAtTime(0.025, now, 0.12);      // duck rápido
+  }
+
+  elStatus.textContent = '⟳ sintetizando…';
+
+  schedule(() => {
+    try {
+      const sp     = _computeSonic(commit.p1, commit.p2, commit.p3, commit.p4, commit.p5, commit.p6);
+      const stereo = _synthesize(sp, CONFIG.duration, 44100);
+      const N      = stereo.length / 2;
+      const buf    = audioCtx.createBuffer(2, N, 44100);
+      const chL    = buf.getChannelData(0);
+      const chR    = buf.getChannelData(1);
+      for (let i = 0; i < N; i++) { chL[i] = stereo[2*i]; chR[i] = stereo[2*i+1]; }
+
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+
+      // Compensar latencia: tiempo transcurrido desde commit + baseLatency del contexto.
+      // Garantiza que audio y visual "arrancan" desde el mismo instante semántico.
+      const elapsed    = (performance.now() - commit.t) / 1000;
+      const baseL      = audioCtx.baseLatency || 0;
+      const startDelay = Math.max(0, baseL - elapsed);
+      src.start(audioCtx.currentTime + startDelay);
+
+      currentSource = src;
+      _syncDetenerBtn();
+      src.onended = () => {
+        currentSource = null;
+        _syncDetenerBtn();
+        elStatus.textContent = `⬤ ${commit.label} — activo · ${IS_MOBILE ? 'toca' : 'haz clic'} para escuchar de nuevo`;
+        // Restaurar campo continuo: el nivel exacto lo retomará _updateFieldOsc
+        // en el siguiente frame con hoverState actual. Solo des-duckeamos suave.
+        if (fieldActive && fieldGain) {
+          fieldGain.gain.setTargetAtTime(0.06, audioCtx.currentTime, 0.4);
+        }
+      };
+      elStatus.textContent = `▶ Reproduciendo: ${commit.label}`;
+    } catch(err) {
+      elStatus.textContent = `Error síntesis: ${err.message}`;
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  STOP GLOBAL — estado cero absoluto, sin guards ni flags
+//  Mata todos los nodos síncronamente. Llamable desde
+//  cualquier estado (FIELD, ANCHOR, o ambos solapados).
+//  Accesible desde btn-detener (footer) y btn-audio-header.
+// ══════════════════════════════════════════════════════
+function stopAll() {
+  // 1. Fuente puntual (ANCHOR)
+  if (currentSource) {
+    try { currentSource.stop(); } catch(e) {}
+    currentSource = null;
+  }
+  // 2. Campo continuo (FIELD) — kill directo, sin setTimeout
+  //    No llamamos _stopFieldOsc() porque su setTimeout(900ms)
+  //    deja fieldActive=true durante ~900ms y produce race conditions.
+  try { fieldOsc?.stop();  } catch(e) {}
+  try { fieldMod?.stop();  } catch(e) {}
+  try { fieldDC?.stop();   } catch(e) {}
+  fieldOsc = fieldMod = fieldModGain = null;
+  fieldDC  = fieldDCGain = fieldAMGain = null;
+  fieldGain   = null;
+  fieldActive = false;
+  // 3. Suspende contexto — _syncAudioBtn() se llama en el callback
+  //    para leer audioCtx.state cuando ya es 'suspended', no antes.
+  if (audioCtx && audioCtx.state === 'running') {
+    audioCtx.suspend().then(() => {
+      _syncAudioBtn();
+      _syncDetenerBtn();
+    }).catch(() => {
+      _syncAudioBtn();
+      _syncDetenerBtn();
+    });
+  } else {
+    _syncAudioBtn();
+    _syncDetenerBtn();
+  }
+  // 4. Anuncia al SR
+  const sr = document.getElementById('sr-announcer');
+  if (sr) {
+    sr.textContent = '';
+    void sr.offsetHeight;
+    sr.textContent = 'Audio detenido.';
+  }
+  elStatus.textContent = '· detenido';
+}
+
+function _syncDetenerBtn() {
+  const btn = document.getElementById('btn-detener');
+  if (!btn) return;
+  const active = (currentSource !== null) || fieldActive ||
+                 (audioCtx && audioCtx.state === 'running');
+  btn.classList.toggle('visible', active);
+}
+
+function _syncAudioBtn() {
+  const btn = document.getElementById('btn-audio-header');
+  if (!btn) return;
+  const active = audioCtx && audioCtx.state === 'running';
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  btn.setAttribute('aria-label', active
+    ? 'Audio activo — pulsa para detener'
+    : 'Activar audio del campo perceptual');
+  btn.querySelector('svg').innerHTML = active
+    ? '<rect x="3" y="2" width="4" height="12" fill="currentColor"/><rect x="9" y="2" width="4" height="12" fill="currentColor"/>'
+    : '<polygon points="3,2 13,8 3,14" fill="currentColor"/>';
+}
+
+(function initDetenerBtn() {
+  const btn = document.getElementById('btn-detener');
+  if (!btn) return;
+  btn.addEventListener('click', stopAll);
+})();
+
+// Mostrar btn-detener cuando hay audio activo
+// Se llama desde playAnchor y _startFieldOsc vía patch
+
+
+const canvas   = document.getElementById('map');
+const ctx      = canvas.getContext('2d');
+const mapWrap  = document.getElementById('mapWrap');
+
+let W, H, PAD;
+let cursorX = -1, cursorY = -1;
+let cursorP1 = null, cursorP4 = null;
+let lastResult = null;
+
+// ── Pointer stream buffer ─────────────────────────────────
+// Input es productor puro. rafLoop es el único orquestador.
+// Elimina RAF thrashing en bursts de pointermove (iOS Safari).
+const PTR_BUF_SIZE = 8;
+const ptrBuf = new Float32Array(PTR_BUF_SIZE * 2);
+let ptrHead = 0;
+let ptrTail = 0;
+let ptrActive = false; // hay posición válida en el campo
+
+function ptrWrite(x, y) {
+  ptrBuf[ptrHead * 2]     = x;
+  ptrBuf[ptrHead * 2 + 1] = y;
+  ptrHead = (ptrHead + 1) % PTR_BUF_SIZE;
+  if (ptrHead === ptrTail) {
+    ptrTail = (ptrTail + 1) % PTR_BUF_SIZE; // overflow: descarta más antiguo
+  }
+  ptrActive = true;
+}
+
+// Sample coalescer: devuelve solo la posición más reciente.
+// En campo perceptual continuo los intermedios no añaden info.
+// Bifurcación futura: cambiar a "consume 1 por frame" si se introduce
+// velocity field o trajectory energy.
+function ptrRead() {
+  if (ptrHead === ptrTail) return null;
+  const latest = (ptrHead - 1 + PTR_BUF_SIZE) % PTR_BUF_SIZE;
+  const x = ptrBuf[latest * 2];
+  const y = ptrBuf[latest * 2 + 1];
+  ptrTail = ptrHead; // flush — solo importa estado más reciente
+  return { x, y };
+}
+
+function ptrReset() {
+  ptrHead = ptrTail = 0;
+  ptrActive = false;
+}
+
+function resize() {
+  // offsetWidth/offsetHeight: dimensión del contenedor en el layout del grid,
+  // sin incluir bordes de scroll ni transformaciones externas.
+  // getBoundingClientRect() puede devolver el tamaño del canvas inflado
+  // si se llama antes de que el grid haya resuelto el nuevo frame,
+  // creando el bucle: canvas inflado → mapWrap inflado → RO → resize → repeat.
+  const newW = mapWrap.offsetWidth;
+  const newH = mapWrap.offsetHeight;
+
+  _show(`RO:${_roCount} mapWrap:${Math.round(newW)}x${Math.round(newH)} inner:${window.innerWidth} client:${document.documentElement.clientWidth} bScroll:${document.body.scrollWidth} dScroll:${document.documentElement.scrollWidth}`);
+
+  if (newW < 10 || newH < 10) return; // dimensiones inválidas aún no resueltas
+  if (newW === W && newH === H) return;
+  W = newW;
+  H = newH;
+  PAD = 44;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  // NO fijar canvas.style.width/height con px absolutos:
+  // el CSS ya tiene width:100%; height:100% sobre el canvas,
+  // lo que deja que el grid controle el tamaño del contenedor.
+  // Fijar px aquí convertiría el canvas en un elemento de ancho fijo
+  // que podría desbordar mapWrap y re-disparar el ResizeObserver.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+  _fieldCache = null; // invalidar cache al cambiar tamaño
+  // render() no necesita llamarse aquí — rafLoop ya corre continuamente
+}
+
+// Coordenadas canvas → perceptual space
+function canvasToP(cx, cy) {
+  const p1 = P1_MIN + ((cx - PAD) / (W - PAD*2)) * (P1_MAX - P1_MIN);
+  const p4 = P4_MAX - ((cy - PAD) / (H - PAD*2)) * (P4_MAX - P4_MIN); // Y invertido
+  return { p1: Math.max(P1_MIN, Math.min(P1_MAX, p1)),
+           p4: Math.max(P4_MIN, Math.min(P4_MAX, p4)) };
+}
+
+// Perceptual space → canvas
+function pToCanvas(p1, p4) {
+  const cx = PAD + normP1(p1) * (W - PAD*2);
+  const cy = PAD + (1 - normP4(p4)) * (H - PAD*2);
+  return { cx, cy };
+}
+
+// ── Campo de fondo: densidad de obras ──────────────────
+// El campo es ESTATICO: muestra la densidad acumulada de todas las obras
+// mediante un kernel gaussiano fijo (sigma=0.35), independiente del cursor.
+// Se construye una sola vez en OffscreenCanvas y se invalida solo en resize().
+let _fieldCache = null; // { canvas, W, H }
+
+function _buildFieldCache() {
+  const dpr = window.devicePixelRatio || 1;
+  // El OffscreenCanvas se construye al tamaño FISICO (pixeles reales)
+  // y aplica el mismo transform que el canvas principal.
+  // Asi ctx.drawImage() mapea pixel a pixel sin blur ni desalineacion.
+  const oc  = new OffscreenCanvas(Math.round(W * dpr), Math.round(H * dpr));
+  const oct = oc.getContext('2d');
+  oct.setTransform(dpr, 0, 0, dpr, 0, 0); // coordenadas logicas = mismas que canvas
+  const STEP = CONFIG.step;
+  const s2   = 2 * 0.35 * 0.35;
+  for (let px = PAD; px < W - PAD; px += STEP) {
+    for (let py = PAD; py < H - PAD; py += STEP) {
+      const { p1, p4 } = canvasToP(px, py);
+      let density = 0;
+      for (const obra of CATALOGUE) {
+        const d = dist2(p1, p4, obra.P1, obra.P4);
+        density += Math.exp(-(d * d) / s2);
+      }
+      density /= CATALOGUE.length;
+      if (density < CONFIG.densityThresh) continue;
+      const alpha = Math.min(0.35, density * 1.4);
+      oct.fillStyle = 'rgba(200,180,120,' + alpha.toFixed(3) + ')';
+      oct.fillRect(px - STEP / 2, py - STEP / 2, STEP, STEP);
+    }
+  }
+  return { canvas: oc, W, H, dpr };
+}
+
+function drawField() {
+  // Solo reconstruir si no hay cache o el canvas cambio de tamano
+  const dpr = window.devicePixelRatio || 1;
+  if (!_fieldCache || _fieldCache.W !== W || _fieldCache.H !== H || _fieldCache.dpr !== dpr) {
+    _fieldCache = _buildFieldCache();
+  }
+  // 3-arg form: el bitmap ya está en DPR real (W*dpr × H*dpr),
+  // el ctx receptor ya está escalado con setTransform(dpr...).
+  // El 9-arg con src rect físico reintroduciría interpolación bilineal
+  // innecesaria que puede añadir blur leve según GPU.
+  ctx.drawImage(_fieldCache.canvas, 0, 0);
+}
+
+// Halo del cursor: overlay radial independiente del campo estatico
+function drawCursorHalo() {
+  if (cursorX < 0 || cursorP1 === null) return;
+
+  // Entropía de Shannon sobre los pesos del softmax gaussiano.
+  // Mide inestabilidad local del campo: máxima cuando K vecinos tienen peso uniforme
+  // (zona de transición), mínima cuando uno domina (zona estable).
+  // entropy ∈ [0, log(K)]; normalizada a [0,1].
+  let entropy = 0;
+  if (lastResult) {
+    const H_MAX = Math.log(K); // entropía máxima teórica para K vecinos uniformes
+    for (const n of lastResult.neighbours) {
+      if (n.w > 0) entropy -= n.w * Math.log(n.w);
+    }
+    entropy = Math.min(1, entropy / H_MAX); // [0,1]: 0=dominante, 1=uniforme
+  }
+
+  // Temperatura estructural — sin temporalidad interna.
+  // Zona estable (entropy→0): cálido, compacto, borde nítido, sutil.
+  // Zona de transición (entropy→1): frío, difuso, MÁS opaco — la incertidumbre
+  // tiene más presencia visual, no menos. Evita el error de "difuso = invisible".
+  // Dos pases de render — función del estado instantáneo del campo, sin animación.
+
+  // Pase 1: halo principal
+  const radius  = 44 + entropy * 56;              // [44, 100] px
+  const midStop = 0.32 + entropy * 0.32;          // [0.32, 0.64]: borde nítido→difuso
+
+  // Color: cálido (200,172,108) en estabilidad → frío (158,172,215) en transición
+  const r = Math.round(200 - entropy * 42);
+  const g = Math.round(172);
+  const b = Math.round(108 + entropy * 107);
+
+  // Opacidad: SUBE con entropía — la transición es más visible, no menos.
+  // En zona estable el halo es sutil (campo "resuelto").
+  // En transición el halo afirma su presencia (campo "indeciso").
+  const alpha0  = 0.10 + entropy * 0.14;          // [0.10, 0.24] centro
+  const alpha05 = 0.04 + entropy * 0.07;          // [0.04, 0.11] medio
+
+  const grad = ctx.createRadialGradient(cursorX, cursorY, 0, cursorX, cursorY, radius);
+  grad.addColorStop(0,       `rgba(${r},${g},${b},${alpha0.toFixed(3)})`);
+  grad.addColorStop(midStop, `rgba(${r},${g},${b},${alpha05.toFixed(3)})`);
+  grad.addColorStop(1,       `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cursorX, cursorY, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pase 2: anillo secundario — marca "campo indeciso", ausente en zonas estables.
+  // Alpha también sube con entropía para cruzar umbral visual en móvil.
+  if (entropy > 0.30) {
+    const ringAlpha = (entropy - 0.30) * 0.18;    // [0, 0.126] — más visible
+    const ringR     = radius * 1.50;
+    const grad2 = ctx.createRadialGradient(cursorX, cursorY, radius * 0.85,
+                                           cursorX, cursorY, ringR);
+    grad2.addColorStop(0,   `rgba(${r},${g},${b},${ringAlpha.toFixed(3)})`);
+    grad2.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = grad2;
+    ctx.beginPath();
+    ctx.arc(cursorX, cursorY, ringR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// -- Ejeses ────────────────────────────────────────────────
+function drawAxes() {
+  ctx.strokeStyle = '#1f1f23';
+  ctx.lineWidth = 1;
+
+  // Grid lines
+  for (let i = 0; i <= 4; i++) {
+    const x = PAD + (i / 4) * (W - PAD*2);
+    ctx.beginPath(); ctx.moveTo(x, PAD); ctx.lineTo(x, H - PAD);
+    ctx.stroke();
+    // Etiqueta P1
+    const p1val = P1_MIN + (i / 4) * (P1_MAX - P1_MIN);
+    ctx.fillStyle = '#2e2e35';
+    ctx.font = '9px IBM Plex Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(p1val.toFixed(1), x, H - PAD + 14);
+  }
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD + (i / 4) * (H - PAD*2);
+    ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y);
+    ctx.stroke();
+    const p4val = P4_MAX - (i / 4) * (P4_MAX - P4_MIN);
+    ctx.fillStyle = '#2e2e35';
+    ctx.font = '9px IBM Plex Mono';
+    ctx.textAlign = 'right';
+    ctx.fillText(p4val.toFixed(2), PAD - 6, y + 3);
+  }
+}
+
+// ── Obras ────────────────────────────────────────────────
+function drawWorks(result) {
+  const weightMap = new Map();
+  if (result) result.neighbours.forEach(n => weightMap.set(n.obra.id, n.w));
+
+  CATALOGUE.forEach(obra => {
+    const { cx, cy } = pToCanvas(obra.P1, obra.P4);
+    const w = weightMap.get(obra.id) || 0;
+
+    // Radio y opacidad según peso
+    const r = 2.5 + w * 6;
+    const alpha = 0.55 + w * 0.45;
+
+    // Color: hue basado en P1 norm
+    const hue = 30 + normP1(obra.P1) * 40; // naranja→amarillo según entropía
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${hue}, 90%, ${55 + w*35}%, ${alpha})`;
+    ctx.fill();
+
+    // Borde si tiene peso significativo
+    if (w > 0.05) {
+      ctx.strokeStyle = `hsla(${hue}, 100%, 85%, ${w})`;
+      ctx.lineWidth = 0.5 + w;
+      ctx.stroke();
+    }
+
+    // Etiqueta si es muy dominante (umbral mayor en movil = menos texto)
+    if (w > CONFIG.labelThresh) {
+      ctx.fillStyle = `rgba(220, 210, 180, ${Math.min(1, w * 2.5)})`;
+      ctx.font = `${9 + w * 4}px IBM Plex Mono`;
+      ctx.textAlign = 'center';
+      const label = obra.id.length > 22 ? obra.id.slice(0,20) + '…' : obra.id;
+      ctx.fillText(label, cx, cy - r - 5);
+    }
+  });
+}
+
+// ── Cursor ───────────────────────────────────────────────
+function drawCursor() {
+  if (cursorX < 0) return;
+  const x = cursorX, y = cursorY;
+
+  // Cruz
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(PAD, y); ctx.lineTo(W - PAD, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, PAD); ctx.lineTo(x, H - PAD); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Punto central
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y, 7, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// ── Líneas de conexión al vecindario ────────────────────
+function drawConnections(result) {
+  if (!result || cursorX < 0) return;
+  result.neighbours.forEach(n => {
+    if (n.w < 0.04) return;
+    const { cx, cy } = pToCanvas(n.obra.P1, n.obra.P4);
+    ctx.beginPath();
+    ctx.moveTo(cursorX, cursorY);
+    ctx.lineTo(cx, cy);
+    ctx.strokeStyle = `rgba(200, 180, 120, ${n.w * 0.6})`;
+    ctx.lineWidth = n.w * 2;
+    ctx.stroke();
+  });
+}
+
+// ── Loop RAF — único orquestador del sistema ─────────────
+// Consume el buffer de input una vez por frame.
+// Render siempre activo: el campo es continuo aunque no haya input nuevo.
+function rafLoop() {
+  const ptr = ptrRead();
+
+  if (ptr !== null) {
+    cursorX = ptr.x;
+    cursorY = ptr.y;
+
+    const { p1, p4 } = canvasToP(cursorX, cursorY);
+    cursorP1 = p1;
+    cursorP4 = p4;
+
+    elCP1.textContent = p1.toFixed(3);
+    elCP4.textContent = p4.toFixed(3);
+
+    lastResult = query(p1, p4);
+    elCDist.textContent = lastResult.neighbours[0].d.toFixed(3);
+
+    const nb = lastResult.neighbours;
+    hoverState = {
+      p1: nb.reduce((s,n) => s + n.obra.P1 * n.w, 0),
+      p2: nb.reduce((s,n) => s + n.obra.P2 * n.w, 0),
+      p3: nb.reduce((s,n) => s + n.obra.P3 * n.w, 0),
+      p4: nb.reduce((s,n) => s + n.obra.P4 * n.w, 0),
+      p5: nb.reduce((s,n) => s + n.obra.P5 * n.w, 0),
+      p6: nb.reduce((s,n) => s + n.obra.P6 * n.w, 0),
+      label: nb[0].obra.id,
+      // sin cx/cy — posición canvas se reconstruye desde cursorX/cursorY en cada frame
+    };
+
+    // Panel DOM + status: throttleados a PANEL_THROTTLE_MS.
+    // El canvas y el audio siguen actualizándose cada frame sin interrupción.
+    const _now = performance.now();
+    if (_now - _lastPanelMs >= PANEL_THROTTLE_MS) {
+      _lastPanelMs = _now;
+      try { updatePanel(lastResult); } catch(e) { console.error('updatePanel:', e); }
+      elStatus.textContent = `Explorando: ${nb[0].obra.id} · ${IS_MOBILE ? 'toca' : 'haz clic'} para sonar`;
+    }
+
+    // Actualizar capa de audio continuo si el contexto ya está activo.
+    // _startFieldOsc se llama solo si aún no hay oscilador (primera interacción post-commit).
+    // _updateFieldOsc propaga hoverState + entropía al oscilador frame a frame.
+    if (audioCtx && audioCtx.state === 'running') {
+      // Calcular entropía local — misma métrica que drawCursorHalo para coherencia
+      const H_MAX = Math.log(K);
+      let entropy = 0;
+      for (const n of nb) if (n.w > 0) entropy -= n.w * Math.log(n.w);
+      entropy = Math.min(1, entropy / H_MAX);
+
+      if (!fieldActive) _startFieldOsc();
+      _updateFieldOsc(hoverState, entropy);
+    }
+  }
+
+  render();
+  requestAnimationFrame(rafLoop);
+}
+
+// ── Historia de trayectoria perceptual ───────────────────
+// Polilínea temporal + nodos con decay perceptual no lineal.
+// Reciente = alpha 1.0 / Antiguo → cae rápido (pow 1.7) → HISTORY_ALPHA_LO.
+// El nodo más reciente lo dibuja drawAnchor() — aquí solo los históricos.
+function drawHistory() {
+  const n = anchorHistory.length;
+  if (n < 1) return;
+
+  const pts = anchorHistory.map(a => a.cx != null ? { cx: a.cx, cy: a.cy } : pToCanvas(a.p1, a.p4));
+
+  // alpha(i): i=0 más antiguo → i=n-1 más reciente
+  // INVARIANTE: t = i/(n-1), nunca i ni i/HISTORY_MAX.
+  //   - i/(n-1): t ∈ [0,1] siempre, independiente del tamaño de history.
+  //   - Índice absoluto (i): t crece con n → alpha del mismo nodo cambia al insertar otros → decay explosivo.
+  //   - i/HISTORY_MAX: underflow cuando n < HISTORY_MAX → nodos recientes nunca llegan a t=1.
+  // Caso n===1: t=1 fuerza alpha máximo (nodo único = reciente por definición).
+  // pow(1.7) → caída rápida en pasado lejano, presencia sostenida en reciente.
+  function nodeAlpha(i) {
+    const t = n === 1 ? 1 : i / (n - 1); // normalizado por rango real, no por capacidad máxima
+    return HISTORY_ALPHA_LO + (1 - HISTORY_ALPHA_LO) * Math.pow(t, 1.7);
+  }
+
+  // Polilínea de ruta — segmento por segmento para decay continuo
+  if (n >= 2) {
+    ctx.save();
+    ctx.setLineDash([2, 4]);
+    for (let i = 0; i < n - 1; i++) {
+      const alpha = nodeAlpha(i) * 0.4; // línea más sutil que los nodos
+      ctx.beginPath();
+      ctx.moveTo(pts[i].cx, pts[i].cy);
+      ctx.lineTo(pts[i + 1].cx, pts[i + 1].cy);
+      ctx.strokeStyle = `rgba(200, 180, 120, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 0.5 + nodeAlpha(i) * 0.5;
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // Nodos históricos — el último (más reciente) lo omite: drawAnchor() lo dibuja
+  for (let i = 0; i < n - 1; i++) {
+    const alpha = nodeAlpha(i);
+    const { cx, cy } = pts[i];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(232, 224, 200, 0.8)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(232, 224, 200, 0.3)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Marca la posición del último tap — persiste mientras hay anchorState.
+// Posición reconstruida desde P-space via pToCanvas() → invariante ante resize/DPR.
+// P-space es la única fuente de verdad geométrica; canvas coords son cache efímero.
+function drawAnchor() {
+  if (!anchorState) return;
+  // Usa la posición exacta del cursor al pulsar, no la coordenada de la obra
+  const cx = anchorState.cx != null ? anchorState.cx : pToCanvas(anchorState.p1, anchorState.p4).cx;
+  const cy = anchorState.cy != null ? anchorState.cy : pToCanvas(anchorState.p1, anchorState.p4).cy;
+  ctx.save();
+  // punto central sólido
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(232, 224, 200, 0.9)';
+  ctx.fill();
+  // anillo intermedio
+  ctx.beginPath();
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(232, 224, 200, 0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // halo exterior
+  ctx.beginPath();
+  ctx.arc(cx, cy, 17, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(232, 224, 200, 0.15)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Render principal — dibujo puro, sin lógica de estado ─
+function render() {
+  ctx.clearRect(0, 0, W, H);
+
+  // Fondo
+  ctx.fillStyle = '#0a0a0b';
+  ctx.fillRect(0, 0, W, H);
+
+  drawField();
+  drawCursorHalo();
+  drawAxes();
+  drawConnections(lastResult);
+  drawWorks(lastResult);
+  drawHistory();  // trayectoria histórica — debajo del anchor actual
+  drawAnchor();   // commit más reciente — encima de la historia
+  drawCursor();
+}
+
+// ══════════════════════════════════════════════════════
+//  PANEL LATERAL — actualización
+// ══════════════════════════════════════════════════════
+const elDominantTitle  = document.getElementById('dominantTitle');
+const elDominantScore  = document.getElementById('dominantScore');
+const elDWeight        = document.getElementById('dWeight');
+const elDDist          = document.getElementById('dDist');
+const elNeighbours     = document.getElementById('neighbours');
+const elSonicGrid      = document.getElementById('sonicGrid');
+const elRegion         = document.getElementById('regionText');
+const elCP1            = document.getElementById('cP1');
+const elCP4            = document.getElementById('cP4');
+const elCDist          = document.getElementById('cDist');
+const elStatus         = document.getElementById('status');
+
+// ── Throttle de actualizaciones DOM del panel ─────────────
+// El RAF corre a ~60 Hz pero el panel no necesita actualizarse
+// en cada frame: 150 ms (~6-7 Hz) es imperceptible para el usuario
+// y reduce las mutaciones DOM (y la carga del árbol de accesibilidad)
+// en ~90%. Esto mejora el rendimiento en todos los dispositivos,
+// independientemente de si VoiceOver/TalkBack está activo.
+let _lastPanelMs = 0;
+const PANEL_THROTTLE_MS = 150;
+
+const SONIC_DEFS = [
+  { key: 'freq',      label: 'freq',  unit: 'Hz',  min: 150, max: 750 },
+  { key: 'tempo',     label: 'tempo', unit: 'bpm', min: 70,  max: 115 },
+  { key: 'decay',     label: 'decay', unit: 's',   min: 0.3, max: 0.7 },
+  { key: 'mod_depth', label: 'mod∂',  unit: 'Hz',  min: 144, max: 285 },
+  { key: 'mod_rate',  label: 'mod~',  unit: 'Hz',  min: 1.0, max: 8.5 },
+];
+
+// ── Perfil perceptual para lectores de pantalla ─────────────────────────────
+// Convierte valores del hoverState en descripciones humanas (Bajo/Medio/Alto).
+// Umbrales derivados de percentiles 33/67 del catálogo real (73 obras).
+// No modifica ningún cálculo perceptual ni sónico: solo capa textual accesible.
+function toPerceptualProfile(p1, p2, p4, decay, p5) {
+  function nivel(v, bajoMax, altoMin) {
+    if (v < bajoMax)  return 'bajo';
+    if (v >= altoMin) return 'alto';
+    return 'medio';
+  }
+  const color        = nivel(p1,    2.2,  3.6);
+  const estructura   = nivel(p4,    1.74, 1.86);
+  const contraste    = nivel(p2,    0.10, 0.27);
+  const complejidad  = nivel(decay, 0.50, 0.62);
+  const organizacion = nivel(p5,    0.22, 0.48);
+
+  return `Perfil perceptual: color ${color}, estructura ${estructura}, ` +
+         `contraste ${contraste}, complejidad ${complejidad} ` +
+         `y organización espacial ${organizacion}.`;
+}
+
+// Throttle para #sr-perfil: actualiza máximo cada 2 s para no saturar TalkBack.
+let _srPerfilMs = 0;
+const SR_PERFIL_THROTTLE = 2000;
+
+function updateSrPerfil(p1, p2, p4, decay, p5) {
+  const now = performance.now();
+  if (now - _srPerfilMs < SR_PERFIL_THROTTLE) return;
+  const perfil = toPerceptualProfile(p1, p2, p4, decay, p5);
+  // Solo anuncia si el perfil ha cambiado desde el último anuncio.
+  // Evita saturar TalkBack/VoiceOver con texto idéntico.
+  if (perfil === updateSrPerfil._last) return;
+  updateSrPerfil._last = perfil;
+  _srPerfilMs = now;
+  // sr-perfil (polite) queda como canal de respaldo para desktop.
+  const elPerfil = document.getElementById('sr-perfil');
+  if (elPerfil) { elPerfil.textContent = ''; void elPerfil.offsetHeight; elPerfil.textContent = perfil; }
+  // TalkBack ignora aria-live polite dentro de role="application".
+  // El canal assertive garantiza que el perfil se pronuncie en móvil.
+  // setTimeout(50) asegura que vaciado y relleno ocurren en ciclos de render distintos;
+  // void offsetHeight síncrono no es suficiente para que TalkBack detecte el cambio.
+  const elAnnouncer = document.getElementById('sr-announcer');
+  if (elAnnouncer) {
+    elAnnouncer.textContent = '';
+    setTimeout(() => { elAnnouncer.textContent = perfil; }, 50);
+  }
+}
+updateSrPerfil._last = '';
+
+function updatePanel(result) {
+  if (!result) return;
+  const { neighbours, sonic } = result;
+  const _findMeta = window.ArgiraMapExplorer?.findMeta ?? (() => null);
+
+  // Dominante
+  const dom = neighbours[0];
+  const domMeta = _findMeta(dom.obra.id);
+  elDominantTitle.textContent = domMeta?.titulo ? `${domMeta.titulo} · ${domMeta.artista}` : dom.obra.id;
+  elDWeight.textContent = (dom.w * 100).toFixed(0) + '%';
+  elDDist.textContent   = dom.d.toFixed(3);
+
+  // Lista de vecinos
+  elNeighbours.innerHTML = '';
+  neighbours.forEach(n => {
+    const pct = (n.w * 100).toFixed(0);
+    const meta = _findMeta(n.obra.id);
+    const lbl = meta?.titulo ? `${meta.titulo} · ${meta.artista}` : n.obra.id;
+    const row = document.createElement('div');
+    row.className = 'neighbour-row';
+    row.innerHTML = `
+      <div class="n-label">${lbl}</div>
+      <div class="n-weight">${pct}%</div>
+      <div class="n-bar-wrap"><div class="n-bar" style="width:${pct}%"></div></div>
+    `;
+    elNeighbours.appendChild(row);
+  });
+
+  // Parametros sonicos — derivados de _computeSonic(hoverState)
+  // para coherencia exacta con el audio real.
+  // DocumentFragment: un solo reflow en lugar de 5 ciclos parse/serialize/replace.
+  // innerHTML+= era la peor estrategia posible dentro de un bucle (lee, serializa,
+  // concatena, parsea, reemplaza nodos en cada iteración).
+  if (hoverState) {
+    const sp = _computeSonic(hoverState.p1, hoverState.p2, hoverState.p3,
+                             hoverState.p4, hoverState.p5, hoverState.p6);
+    const sonicDisplay = {
+      freq:      sp.freq_base,
+      tempo:     sp.tempo_bpm,
+      decay:     sp.decay,
+      mod_depth: sp.mod_depth,
+      mod_rate:  sp.mod_rate,
+    };
+    const frag = document.createDocumentFragment();
+    SONIC_DEFS.forEach(def => {
+      const val = sonicDisplay[def.key];
+      const pct = Math.max(2, Math.round(((val - def.min) / (def.max - def.min)) * 100));
+      const k = document.createElement('div');
+      k.className = 's-key';
+      k.textContent = def.label;
+      const bw = document.createElement('div');
+      bw.className = 's-bar-wrap';
+      const b = document.createElement('div');
+      b.className = 's-bar';
+      b.style.width = pct + '%';
+      bw.appendChild(b);
+      const v = document.createElement('div');
+      v.className = 's-val';
+      v.textContent = val.toFixed(1);
+      const u = document.createElement('span');
+      u.style.color = 'var(--muted)';
+      u.textContent = ' ' + def.unit;
+      v.appendChild(u);
+      frag.appendChild(k);
+      frag.appendChild(bw);
+      frag.appendChild(v);
+    });
+    elSonicGrid.replaceChildren(frag);
+  } else {
+    elSonicGrid.replaceChildren();
+  }
+
+  // Región (descripción del campo)
+  const p1n = normP1(cursorP1) * 100;
+  const p4n = normP4(cursorP4) * 100;
+  const chromaDesc = p1n > 70 ? 'color muy variado' : p1n < 30 ? 'casi sin color' : 'color moderado';
+  const fracDesc   = p4n > 65 ? 'textura muy compleja' : p4n < 35 ? 'textura simple' : 'complejidad media';
+  const regionStr = `${chromaDesc} · ${fracDesc}`;
+  elRegion.textContent = regionStr;
+  // sr-announcer para carácter de zona: solo anuncia si cambia significativamente
+  // (evita saturar TalkBack/VoiceOver con cada movimiento)
+  if (elRegion._lastAnnounced !== regionStr) {
+    elRegion._lastAnnounced = regionStr;
+    // aria-live="polite" en #regionText ya hace el trabajo;
+    // no duplicamos en sr-announcer para no saturar el canal assertive.
+  }
+
+  // Perfil perceptual para lectores de pantalla — throttleado a SR_PERFIL_THROTTLE.
+  // Lee hoverState (ya estabilizado por rafLoop antes de llegar aquí).
+  if (hoverState) {
+    const sp = _computeSonic(hoverState.p1, hoverState.p2, hoverState.p3,
+                             hoverState.p4, hoverState.p5, hoverState.p6);
+    updateSrPerfil(hoverState.p1, hoverState.p2, hoverState.p4, sp.decay, hoverState.p5);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  EVENTOS — input como productor puro
+// ══════════════════════════════════════════════════════
+// onMove solo escribe en el buffer. Toda la lógica de estado
+// vive en rafLoop. Elimina RAF thrashing en bursts de iOS Safari.
+function onMove(e) {
+  if (e.pointerType === 'touch') e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  ptrWrite(e.clientX - rect.left, e.clientY - rect.top);
+}
+
+mapWrap.addEventListener('pointermove', onMove, { passive: false });
+mapWrap.addEventListener('pointerdown', e => {
+  // Captura el puntero: garantiza que pointermove siga llegando
+  // aunque el dedo salga del área — clave en Android Chrome
+  mapWrap.setPointerCapture(e.pointerId);
+  onMove(e);
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+}, { passive: false });
+
+mapWrap.addEventListener('pointerup', e => {
+  if (mapWrap.hasPointerCapture(e.pointerId)) {
+    mapWrap.releasePointerCapture(e.pointerId);
+  }
+  setAnchorFromHover(e);
+});
+
+mapWrap.addEventListener('pointercancel', e => {
+  // Con touch-action:none + setPointerCapture, pointercancel solo llega
+  // por causas reales (llamada entrante, cambio de app).
+  // Liberamos captura pero NO reseteamos — el usuario puede volver.
+  if (mapWrap.hasPointerCapture(e.pointerId)) {
+    mapWrap.releasePointerCapture(e.pointerId);
+  }
+});
+
+function _resetCursorState() {
+  ptrReset();
+  cursorX = cursorY = -1;
+  cursorP1 = cursorP4 = null;
+  lastResult = null;
+  hoverState = null;
+  elCP1.textContent = elCP4.textContent = elCDist.textContent = '—';
+  elDominantTitle.textContent = '—';
+  elNeighbours.innerHTML = '';
+  elSonicGrid.innerHTML  = '';
+  elRegion.textContent = 'Explora moviendo el cursor';
+  if (!anchorState) elStatus.textContent = '·';
+  _stopFieldOsc();
+}
+
+// pointerleave: en escritorio el cursor sale del mapa → reset normal.
+// En móvil con setPointerCapture este evento no llega durante el arrastre,
+// así que no interfiere con la interacción táctil continua.
+mapWrap.addEventListener('pointerleave', e => {
+  // Solo resetear si no hay captura activa (= escritorio, no arrastre táctil)
+  if (!mapWrap.hasPointerCapture(e.pointerId)) {
+    _resetCursorState();
+  }
+});
+
+// pointercancel duplicado eliminado — ver handler arriba
+
+// visibilitychange bidireccional:
+//   hidden  → limpia UI + detiene audio + suspend()
+//   visible → resume() si suspended (evita 'tap again' en iOS Safari)
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) {
+    _resetCursorState(); // ya llama _stopFieldOsc internamente
+    try { currentSource?.stop(); } catch(e) {}
+    currentSource = null;
+    try { await audioCtx?.suspend(); } catch(e) {}
+  } else {
+    // Al volver: reactivar contexto si quedó suspended
+    try {
+      if (audioCtx?.state === 'suspended') await audioCtx.resume();
+    } catch(e) {}
+  }
+});
+
+// ── Gestión de historia — inserción con thinning y soft cap ──
+// Thinning asimétrico: solo reemplaza si el vecino cercano NO es reciente (últimos 3).
+// Soft cap: elimina el nodo con menor activity_score = recencia × distancia_media_local.
+function _historyDistP(a, b) {
+  const dx = normP1(a.p1) - normP1(b.p1);
+  const dy = normP4(a.p4) - normP4(b.p4);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function pushHistory(commit) {
+  const n = anchorHistory.length;
+
+  // Thinning: buscar el vecino MÁS CERCANO globalmente antes de decidir
+  // (evita colisión de decisión cuando varios nodos caen dentro del radio)
+  let closestIdx  = -1;
+  let closestDist = Infinity;
+  for (let i = 0; i < n; i++) {
+    const d = _historyDistP(commit, anchorHistory[i]);
+    if (d < closestDist) { closestDist = d; closestIdx = i; }
+  }
+
+  if (closestDist < HISTORY_MIN_DIST) {
+    const isRecent = closestIdx >= n - 3; // últimos 3 = zona reciente protegida
+    if (!isRecent) {
+      anchorHistory[closestIdx] = commit; // reemplaza el más cercano no reciente
+      return;
+    }
+    // si es reciente, cae a push normal — preserva micro-movimientos del gesto vivo
+  }
+
+  anchorHistory.push(commit);
+
+  // Soft cap: elimina el nodo con menor activity score
+  // log(1 + distMedia) evita empates masivos en clusters densos
+  if (anchorHistory.length > HISTORY_MAX) {
+    let minScore = Infinity;
+    let minIdx   = 0;
+    const total  = anchorHistory.length;
+    for (let i = 0; i < total - 1; i++) { // nunca elimina el más reciente
+      const recencia = i / (total - 1);   // normalizado [0,1]: 0=antiguo, 1=reciente
+      let distSum = 0, distCount = 0;
+      if (i > 0)         { distSum += _historyDistP(anchorHistory[i], anchorHistory[i-1]); distCount++; }
+      if (i < total - 1) { distSum += _historyDistP(anchorHistory[i], anchorHistory[i+1]); distCount++; }
+      const distMedia = distCount > 0 ? distSum / distCount : 0;
+      const score = recencia * Math.log(1 + distMedia); // log evita colapso en zonas densas
+      if (score < minScore) { minScore = score; minIdx = i; }
+    }
+    anchorHistory.splice(minIdx, 1);
+  }
+}
+
+// ── Imagen de obra anclada — Wikipedia pageimages ─────────
+// Cache en memoria: evita fetch redundante y negative caching (null = sin imagen).
+// requestId: stale request guard — descarta respuestas de fetches anteriores
+// si el usuario ancló otra obra mientras el fetch estaba en vuelo.
+const _imgCache = new Map();
+let   _imgReqId = 0;
+
+// Capa 2: alias para títulos que no coinciden con Wikipedia en inglés
+// Clave: título corto extraído del id (parte tras "·")
+const WIKI_ALIASES = {
+  'Filosofía':           'Philosophy (Klimt)',
+  'La Medicina':         'Medicine (Klimt)',
+  'Jurisprudencia':      'Jurisprudence (Klimt)',
+  'El Temerario':        'The Fighting Temeraire',
+  'Barco de esclavos':   'The Slave Ship',
+  'Casas del Parlamento':'The Burning of the Houses of Lords and Commons',
+  'Lluvia Vapor Velocidad': 'Rain, Steam and Speed',
+  'Dido construyendo Cartago': 'Dido Building Carthage',
+  'Pescadores en el mar':'Fishermen at Sea',
+  'Noche estrellada':    'The Starry Night',
+  'La ronda de noche':   'The Night Watch',
+  'El hijo pródigo':     'Return of the Prodigal Son (Rembrandt)',
+  'La novia judía':      'The Jewish Bride',
+  'Lección de anatomía': 'The Anatomy Lesson of Dr. Nicolaes Tulp',
+  'El abanderado':       'The Standard Bearer (Rembrandt)',
+  'Las Meninas':         'Las Meninas',
+  'Venus Rokeby':        'Rokeby Venus',
+  'Vieja friendo huevos':'Old Woman Frying Eggs',
+  'Las lanzas':          'The Surrender of Breda',
+  'Retrato Juan Pareja': 'Juan de Pareja (painting)',
+  'La lechera':          'The Milkmaid (Vermeer)',
+  'Chica con pendiente de perla': 'Girl with a Pearl Earring',
+  'Impression soleil levant': 'Impression, Sunrise',
+  'Almiar Efecto Nieve': 'Haystacks (Monet series)',
+  'Catedral de Ruán':    'Rouen Cathedral series (Monet)',
+  'Cliff Walk Pourville': 'The Cliff Walk at Pourville',
+  'La clase de ballet':  'The Ballet Class',
+  'El ajenjo':           "L'Absinthe (Degas)",
+  'Familia Bellelli':    'The Bellelli Family',
+  'La Danza II':         'Dance (Matisse)',
+  'La habitación roja':  'The Dessert: Harmony in Red',
+  'Mujer con sombrero':  'Woman with a Hat',
+  'Maja desnuda':        'La maja desnuda',
+  'Saturno':             'Saturn Devouring His Son',
+  'Fusilamientos 3 de mayo': 'The Third of May 1808',
+  'La vendimia':         'The Vintage (Goya)',
+  'Composición 8':       'Composition VIII',
+  'Jaune Rouge Bleu':    'Yellow-Red-Blue',
+  'Cuadrado negro':      'Black Square (Malevich)',
+  'Blanco sobre blanco': 'White on White',
+  'Judith':              'Judith Beheading Holofernes (Caravaggio)',
+  'La cabeza de Medusa': 'Medusa (Caravaggio)',
+  'La captura de Cristo':'The Taking of Christ (Caravaggio)',
+  'La vocación de San Mateo': 'The Calling of Saint Matthew',
+  'La Grande Jatte':     'A Sunday on La Grande Jatte',
+  'Dante y Virgilio':    'The Barque of Dante',
+  'Madame Cézanne':      'Madame Cézanne in a Red Armchair',
+  'Montaña Sainte-Victoire': 'Mont Sainte-Victoire (Cézanne)',
+  'Cesto de manzanas':   'The Basket of Apples',
+  'Moulin de la Galette':'Bal du moulin de la Galette',
+  'El nacimiento de Venus': 'The Birth of Venus',
+  'Sorprendida':         'Surprised! (Rousseau)',
+  'El Grito':            'The Scream',
+  'Mona Lisa':           'Mona Lisa',
+};
+
+// Capa 1: extrae título corto del id ("Klimt · Filosofía" → "Filosofía")
+// y aplica alias si existe, o usa el título corto directamente.
+function _getWikiTitle(label) {
+  const short = label.split('·').pop().trim().replace(/\*/g, '');
+  return WIKI_ALIASES[short] || short;
+}
+
+function _applyImage(imgEl, wrapEl, src) {
+  // Limpiar estado anterior antes de cargar nueva imagen
+  wrapEl.classList.remove('img-hidden');
+  imgEl.classList.remove('loaded');
+  imgEl.onload  = () => imgEl.classList.add('loaded');
+  imgEl.onerror = () => wrapEl.classList.add('img-hidden');
+  imgEl.src = src;
+}
+
+async function _loadAnchorImage(label, imgEl, wrapEl) {
+  const reqId = ++_imgReqId;
+
+  // Limpiar estado anterior al iniciar cualquier carga
+  wrapEl.classList.remove('img-hidden');
+  imgEl.classList.remove('loaded');
+  imgEl.src = '';
+
+  if (_imgCache.has(label)) {
+    const cached = _imgCache.get(label);
+    if (cached) _applyImage(imgEl, wrapEl, cached);
+    else        wrapEl.classList.add('img-hidden');
+    return;
+  }
+
+  const wikiTitle = _getWikiTitle(label);
+
+  try {
+    // Paso 1: buscar el título exacto del artículo
+    const searchUrl = 'https://en.wikipedia.org/w/api.php?' + new URLSearchParams({
+      action:   'query',
+      format:   'json',
+      origin:   '*',
+      list:     'search',
+      srsearch: wikiTitle,
+      srlimit:  '1',
+      srnamespace: '0',
+    });
+    const searchRes  = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+
+    if (reqId !== _imgReqId) return;
+
+    const hits = searchData?.query?.search;
+    if (!hits || hits.length === 0) {
+      _imgCache.set(label, null);
+      wrapEl.classList.add('img-hidden');
+      return;
+    }
+
+    const resolvedTitle = hits[0].title;
+
+    // Paso 2: obtener pageimage del artículo resuelto
+    const imgUrl = 'https://en.wikipedia.org/w/api.php?' + new URLSearchParams({
+      action:      'query',
+      format:      'json',
+      origin:      '*',
+      titles:      resolvedTitle,
+      prop:        'pageimages',
+      pithumbsize: '400',
+    });
+    const imgRes  = await fetch(imgUrl);
+    const imgData = await imgRes.json();
+
+    if (reqId !== _imgReqId) return;
+
+    const page  = Object.values(imgData.query.pages)[0];
+    const thumb = page?.thumbnail?.source ?? null;
+
+    _imgCache.set(label, thumb);
+
+    if (thumb) _applyImage(imgEl, wrapEl, thumb);
+    else       wrapEl.classList.add('img-hidden');
+
+  } catch {
+    if (reqId !== _imgReqId) return;
+    // No cachear null en errores transitorios (red, timeout)
+    // Solo ocultar para esta sesión sin envenenar el caché
+    wrapEl.classList.add('img-hidden');
+  }
+}
+
+// ── Anclaje de estado ─────────────────────────────────────
+// Commit: crea objeto con timestamp que es fuente única para visual y audio.
+// Visual (drawAnchor) usa commit.p1/p4 → pToCanvas() en cada frame.
+// Audio (playAnchor) usa commit.t para compensar latencia de síntesis.
+// Un solo evento semántico → dos proyecciones temporales desde el mismo origen.
+//
+// Contrato de estabilidad del commit:
+//   hoverState aquí es siempre el resultado de al menos un frame completo de query().
+//   Razón: onMove() solo escribe en ptrBuf (productor puro).
+//          rafLoop() consume ptrBuf → llama query() → asigna hoverState (consumidor único).
+//          pointerup dispara setAnchorFromHover() en el mismo hilo, pero DESPUÉS del frame.
+//          Por tanto hoverState contiene el kernel gaussiano resuelto, nunca valores
+//          intermedios de pointermove crudos. El buffer actúa como barrera de sincronización.
+function setAnchorFromHover() {
+  if (!hoverState || cursorP1 == null || cursorP4 == null) return;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+
+  audioCtx.resume().then(() => {
+    // commit: snapshot del hoverState estabilizado por RAF (no valores intermedios de pointermove)
+    // El buffer de input garantiza que hoverState ya fue resuelto por query() en el frame anterior
+    const commit = {
+      p1: hoverState.p1, p2: hoverState.p2, p3: hoverState.p3,
+      p4: hoverState.p4, p5: hoverState.p5, p6: hoverState.p6,
+      label: hoverState.label,
+      cx: cursorX,        // posición exacta del cursor en canvas al pulsar
+      cy: cursorY,
+      t: performance.now(),   // timestamp del commit — audio lo usa para compensar latencia
+    };
+
+    anchorState = commit; // visual lee desde aquí en cada RAF
+    pushHistory(commit);  // añade a trayectoria con thinning + soft cap
+
+    // Panel lateral
+    document.getElementById('anchorSection').style.display = 'block';
+    document.getElementById('anchorTitle').textContent = commit.label;
+
+    // Imagen de la obra — MediaWiki API imageinfo
+    // origin=* → CORS-safe desde cualquier origen (file://, localhost, dominio externo)
+    // Evita Special:FilePath que depende de referrer headers — inconsistente en Android WebView
+    const anchorImg  = document.getElementById('anchorImg');
+    const imgWrap    = document.getElementById('anchorImgWrap');
+
+    anchorImg.className = '';
+    anchorImg.alt = commit.label;
+    anchorImg.src = '';
+    imgWrap.classList.remove('img-hidden');
+
+    _loadAnchorImage(commit.label, anchorImg, imgWrap);
+
+    // Footer pinned
+    document.getElementById('pinnedState').style.display = 'flex';
+    document.getElementById('pinnedTitle').textContent = commit.label;
+
+    // Anuncio para lectores de pantalla (assertive: interrumpe lectura en curso)
+    // Patrón recomendado: vaciar → rellenar en microtask, fuerza re-anuncio
+    // aunque el texto sea igual al anterior (misma obra tocada dos veces).
+    const srAnnouncer = document.getElementById('sr-announcer');
+    if (srAnnouncer) {
+      // Título humano: usa findMeta si está disponible, fallback al id del catálogo.
+      const _fm = window.ArgiraMapExplorer?.findMeta;
+      const meta = _fm ? _fm(commit.label) : null;
+      const nombreObra = meta?.titulo && meta?.artista
+        ? `${meta.titulo}, de ${meta.artista}`
+        : commit.label;
+
+      // Perfil perceptual al anclar — usa los valores del commit.
+      const sp = _computeSonic(commit.p1, commit.p2, commit.p3,
+                               commit.p4, commit.p5, commit.p6);
+      const perfil = toPerceptualProfile(commit.p1, commit.p2, commit.p4, sp.decay, commit.p5);
+
+      // setTimeout(50): mismo patrón que updateSrPerfil — garantiza dos ciclos de render
+      // distintos para que TalkBack detecte el cambio en el live region assertive.
+      const _textoCommit = `Obra seleccionada: ${nombreObra}. ${perfil} Reproduciendo frase musical.`;
+      srAnnouncer.textContent = '';
+      setTimeout(() => { srAnnouncer.textContent = _textoCommit; }, 50);
+    }
+
+    playAnchor(commit); // audio recibe el mismo objeto — sin reinterpretación de estado
+  });
+}
+
+// pointerup en el mapa → anclar
+// pointerup: ver handler combinado con releasePointerCapture arriba
+
+// Panel bottom sheet toggle en móvil — separado, no anidado en pointerup del mapa
+const elPanel = document.getElementById('panel');
+const elPanelToggleBtn = document.getElementById('panel-toggle-btn');
+let panelOpen = false;
+
+function _togglePanel(forceOpen) {
+  panelOpen = forceOpen !== undefined ? forceOpen : !panelOpen;
+  elPanel.classList.toggle('expanded', panelOpen);
+  if (elPanelToggleBtn) {
+    elPanelToggleBtn.setAttribute('aria-expanded', panelOpen ? 'true' : 'false');
+    elPanelToggleBtn.setAttribute('aria-label', panelOpen ? 'Contraer panel de información' : 'Expandir panel de información');
+  }
+}
+
+if (IS_MOBILE && elPanelToggleBtn) {
+  elPanelToggleBtn.hidden = false;
+  // toque en la zona de arrastre (primeros 24px) → toggle
+  elPanel.addEventListener('pointerup', e => {
+    const rect = elPanel.getBoundingClientRect();
+    if (e.clientY - rect.top > 28) return;
+    _togglePanel();
+  });
+  // teclado / VoiceOver / TalkBack → botón
+  elPanelToggleBtn.addEventListener('click', () => _togglePanel());
+}
+
+let _roCount = 0;
+function _show(_msg) {}
+
+// ResizeObserver: reacciona al tamaño REAL de mapWrap después del layout commit.
+// window.resize puede llegar antes de que el grid haya distribuido el espacio;
+// ResizeObserver garantiza que el canvas mide cuando el contenedor ya tiene dimensiones finales.
+const _ro = new ResizeObserver(entries => {
+  _roCount++;
+  resize();
+});
+_ro.observe(mapWrap);
+// Fallback: también escuchar window resize para cambios de orientación en móvil
+window.addEventListener('resize', () => resize());
+
+// ── Descripción desplegable en móvil ─────────────────────
+const elDescToggle = document.getElementById('descToggle');
+if (elDescToggle) {
+  elDescToggle.addEventListener('click', () => {
+    const bar = document.getElementById('descBar');
+    const open = bar.classList.toggle('open');
+    elDescToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────
+document.getElementById('modeLabel').textContent =
+  `σ = 0.18 · k = 7 · ejes P1 × P4 · ${IS_MOBILE ? 'mobile' : 'desktop'} · step=${CONFIG.step} · dur=${CONFIG.duration}s · v10`;
+
+// Doble RAF antes del primer resize: garantiza que el grid CSS ha resuelto
+// su layout final (incluido font loading + reflow de header) antes de que
+// canvas.getBoundingClientRect() devuelva dimensiones reales.
+// ResizeObserver cubre los cambios subsiguientes; este doble RAF cubre el first paint.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    resize();
+    requestAnimationFrame(rafLoop); // arranca el loop DESPUÉS del primer resize válido
+  });
+});
+
+// ══════════════════════════════════════════════════════
+//  MODAL DE AYUDA — accesibilidad + síntesis de voz
+// ══════════════════════════════════════════════════════
+(function initAyuda() {
+  const btnAbrir    = document.getElementById('btn-ayuda');
+  const modal       = document.getElementById('ayuda-modal');
+  const backdrop    = document.getElementById('ayuda-backdrop');
+  const btnCerrar   = document.getElementById('ayuda-close');
+  const btnAudio    = document.getElementById('ayuda-audio-btn');
+  const audioLabel  = document.getElementById('ayuda-audio-label');
+  const audioIcon   = document.getElementById('ayuda-audio-icon');
+
+  // Texto completo para síntesis de voz
+  const GUIA_TEXTO = [
+    'Bienvenido al Campo Perceptual de Argira.',
+    'Paso 1. Mueve el cursor o el dedo por la pantalla. El sonido cambia en tiempo real según la zona.',
+    'Paso 2. Cada punto es una obra de arte. La posición refleja su carácter visual: izquierda significa colores uniformes, derecha significa mucha variedad de color; abajo son formas simples, arriba son texturas complejas.',
+    'Paso 3. Pulsa o toca en cualquier zona para fijar ese punto. Sonará una frase musical derivada de la obra más cercana. Doble click (o doble toque) abre la obra más cercana con sus controles: tocar, Tour sonoro y descripción.',
+    'Paso 4. El panel lateral describe la obra más cercana y los parámetros sonoros activos en esa zona.',
+    'Paso 5. Puedes usar el campo solo con sonido, sin necesidad de ver la pantalla.',
+    'Fin de la guía. Pulsa Escape o el botón Cerrar para volver al campo perceptual.',
+  ].join(' ');
+
+  let utterance  = null;
+  let isPlaying  = false;
+  // Elemento que tenía el foco antes de abrir el modal
+  let focusBeforeModal = null;
+
+  // Foco trampado: nodos focusables dentro del modal
+  function getFocusable() {
+    return Array.from(modal.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )).filter(el => !el.disabled && el.offsetParent !== null);
+  }
+
+  function trapFocus(e) {
+    if (e.key !== 'Tab') return;
+    const nodes = getFocusable();
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last  = nodes[nodes.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  const elApp = document.getElementById('app');
+
+  function openModal() {
+    focusBeforeModal = document.activeElement;
+    modal.hidden    = false;
+    backdrop.hidden = false;
+    btnAbrir.setAttribute('aria-expanded', 'true');
+    // inert desactiva tab, clicks y lectores de pantalla en todo #app
+    // sin tocar el modal, que vive fuera del árbol bloqueado
+    elApp.inert = true;
+    // Foco directo al botón de cierre — patrón recomendado para diálogos
+    // que no son alertas: el usuario decide si lee el contenido o cierra
+    // Foco al modal completo — VoiceOver/TalkBack anuncia "Guía rápida, diálogo"
+    // y el usuario navega el contenido con swipe. El modal tiene tabindex="-1"
+    // para ser focusable sin aparecer en el orden de tabulación normal.
+    requestAnimationFrame(() => modal.focus());
+    document.addEventListener('keydown', onModalKey);
+  }
+
+  function closeModal() {
+    stopAudio();
+    modal.hidden    = true;
+    backdrop.hidden = true;
+    btnAbrir.setAttribute('aria-expanded', 'false');
+    elApp.inert = false;
+    document.removeEventListener('keydown', onModalKey);
+    // Devolver foco al elemento que lo tenía antes
+    if (focusBeforeModal) focusBeforeModal.focus();
+  }
+
+  function onModalKey(e) {
+    if (e.key === 'Escape') { closeModal(); return; }
+    trapFocus(e);
+  }
+
+  // ── Síntesis de voz ───────────────────────────────────
+  // Usa la API Web Speech nativa — sin dependencias externas.
+  // Si el navegador no la soporta, el botón se oculta.
+  if (!window.speechSynthesis) {
+    btnAudio.hidden = true;
+  }
+
+  function setAudioState(playing) {
+    isPlaying = playing;
+    btnAudio.classList.toggle('playing', playing);
+    // Icono: play ▶ cuando parado, stop ■ cuando suena
+    audioIcon.innerHTML = playing
+      ? '<rect x="3" y="2" width="4" height="12" fill="currentColor"/><rect x="9" y="2" width="4" height="12" fill="currentColor"/>'
+      : '<polygon points="3,2 13,8 3,14" fill="currentColor"/>';
+    audioLabel.textContent = playing ? 'Detener guía' : 'Escuchar guía';
+    btnAudio.setAttribute('aria-label', playing ? 'Detener lectura de la guía' : 'Escuchar guía en audio');
+  }
+
+  function stopAudio() {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setAudioState(false);
+  }
+
+  function playAudio() {
+    if (!window.speechSynthesis) return;
+    if (isPlaying) { stopAudio(); return; }
+
+    utterance = new SpeechSynthesisUtterance(GUIA_TEXTO);
+    utterance.lang = 'es-ES';
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => setAudioState(true);
+    utterance.onend   = () => setAudioState(false);
+    utterance.onerror = () => setAudioState(false);
+
+    window.speechSynthesis.cancel(); // limpiar cola previa
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // ── Eventos ───────────────────────────────────────────
+  btnAbrir.addEventListener('click', openModal);
+  btnCerrar.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', closeModal);
+  btnAudio.addEventListener('click', playAudio);
+})();
+
+// ── Botón Audio en header ─────────────────────────────────
+(function initAudioBtn() {
+  const btn = document.getElementById('btn-audio-header');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    }
+    if (audioCtx.state === 'running') {
+      stopAll();
+    } else {
+      await audioCtx.resume().catch(() => {});
+      if (!hoverState) {
+        const p1 = (P1_MIN + P1_MAX) / 2;
+        const p4 = (P4_MIN + P4_MAX) / 2;
+        hoverState = { p1, p2: 0.5, p3: 0.5, p4, p5: 0.5, p6: 0.5 };
+      }
+      if (!fieldActive) {
+        _startFieldOsc();
+        _updateFieldOsc(hoverState, 0.5);
+        // Anuncia activación al SR — TalkBack sabrá que hay audio activo
+        const sr = document.getElementById('sr-announcer');
+        if (sr) {
+          sr.textContent = '';
+          void sr.offsetHeight;
+          sr.textContent = 'Campo de audio activo. Mueve el cursor para explorar. Botón Detener disponible al final de la página.';
+        }
+      }
+      _syncAudioBtn();
+      _syncDetenerBtn();
+    }
+  });
+
+  // Sincronización periódica como safety net (estado puede cambiar externamente)
+  setInterval(() => { _syncAudioBtn(); _syncDetenerBtn(); }, 500);
+})();
+
+</script>
+
+
+    <link rel="stylesheet" href="explorer.css">
+<script src="map-explorer.js"></script>
+</body>
+</html>
