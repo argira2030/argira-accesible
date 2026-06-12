@@ -1877,6 +1877,11 @@ function rafLoop() {
         const _nx  = (cursorP1 - P1_MIN) / _p1r;
         const _ny  = (cursorP4 - P4_MIN) / _p4r;
         ArgiraModeController.onTick(_nx, _ny);
+
+        // ── C_T: emitir posición normalizada para memoria de exploración ──
+        window.dispatchEvent(new CustomEvent('argira:cursor-move', {
+          detail: { nx: _nx, ny: _ny, t: performance.now() }
+        }));
       }
       // ── FIN dispatcher ────────────────────────────────────────────
     }
@@ -2232,6 +2237,7 @@ mapWrap.addEventListener('pointerleave', e => {
   // Solo resetear si no hay captura activa (= escritorio, no arrastre táctil)
   if (!mapWrap.hasPointerCapture(e.pointerId)) {
     _resetCursorState();
+    window.dispatchEvent(new CustomEvent('argira:cursor-leave')); // C_T
   }
 });
 
@@ -2634,7 +2640,8 @@ requestAnimationFrame(() => {
 <script src="argira-region-detector.js"></script>
 <script src="argira-region-impulse.js"></script>
 <script src="argira-region-breathing.js"></script>
-<!-- ── FIN módulos Capas 2–4 ── -->
+<script src="argira-trajectory.js"></script>
+<!-- ── FIN módulos Capas 2–4 + C_T (memoria de exploración) ── -->
 
 <!-- ── SELECTOR DE MODO — UI + ArgiraModeController patch ── -->
 <script>
