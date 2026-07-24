@@ -1,0 +1,477 @@
+/* ================================================================
+   ARGIRA · MAP EXPLORER · explorer.css
+   Modal accesible para obras del mapa perceptual — FASE 1
+   Overlay DOM encima del canvas perceptual      — FASE 2A
+   Nodos accesibles sobre el mapa perceptual     — FASE 2B/2C
+   Compatible con el sistema visual existente (vars, fuentes, colores)
+   ================================================================ */
+
+/* ── FASE 2A — Overlay DOM sobre el canvas ──────────────── */
+#map-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* El overlay en sí no intercepta eventos — solo sus hijos .map-node */
+  pointer-events: none;
+  background: transparent;
+  z-index: 5;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── FASE 2B/2C — Nodos accesibles del mapa perceptual ──── */
+.map-node {
+  /* Necesario para recibir click/keydown aunque el padre tenga pe:none */
+  pointer-events: auto;
+
+  /* Sin esto, un arrastre táctil que empieza sobre uno de los 73 nodos
+     invisibles (que se superponen al área del mapa) puede ser interpretado
+     por Android como scroll de página, ignorando el touch-action:none de
+     #mapWrap/canvas que hay debajo. Mismo valor que el contenedor padre,
+     por consistencia — el nodo no debe comportarse distinto al mapa. */
+  touch-action: none;
+
+  /* Sin apariencia visual — el canvas dibuja los puntos.
+     El nodo existe solo para teclado y lectores de pantalla. */
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+
+  /* outline:none aquí — focus-visible lo sobreescribe de forma selectiva */
+  outline: none;
+}
+
+/* Focus visible: anillo dorado ARGIRA solo cuando se navega por teclado.
+   :focus-visible evita mostrar el anillo en click/tap (comportamiento correcto). */
+.map-node:focus-visible {
+  outline: 2px solid rgba(232, 200, 74, 0.9);
+  outline-offset: 4px;
+  border-radius: 50%;
+  /* Halo de color para mayor visibilidad en pantallas de alto brillo */
+  box-shadow: 0 0 0 5px rgba(184, 146, 42, 0.18);
+}
+
+/* ── Overlay / Backdrop ─────────────────────────────────── */
+#argira-obra-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(8, 8, 10, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+
+#argira-obra-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ── Modal ──────────────────────────────────────────────── */
+#argira-obra-modal {
+  position: relative;
+  background: #0f0f13;
+  border: 1px solid rgba(184, 146, 42, 0.28);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(184,146,42,0.08),
+    0 32px 64px rgba(0,0,0,0.7),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  max-width: 760px;
+  width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+
+  /* scrollbar discreta */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184,146,42,0.3) transparent;
+}
+
+#argira-obra-overlay.open #argira-obra-modal {
+  transform: translateY(0) scale(1);
+}
+
+/* ── Imagen ─────────────────────────────────────────────── */
+#argira-obra-img-wrap {
+  position: relative;
+  width: 100%;
+  /* Altura flexible: no impone un ratio fijo, solo un límite superior.
+     La obra determina su propia proporción real dentro de ese límite
+     (ver #argira-obra-img → object-fit: contain), así que verticales,
+     horizontales y cuadradas se muestran completas y a buen tamaño. */
+  max-height: min(60vh, 620px);
+  overflow: hidden;
+  background: #0a0a0d;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#argira-obra-img {
+  max-width: 100%;
+  max-height: min(60vh, 620px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+#argira-obra-img.loaded {
+  opacity: 1;
+}
+
+/* Placeholder / loading state */
+#argira-obra-img-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(184,146,42,0.35);
+}
+
+/* Degradado inferior sobre la imagen */
+#argira-obra-img-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(8, 8, 10, 0.7) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Cuerpo del modal ───────────────────────────────────── */
+#argira-obra-body {
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Título ─────────────────────────────────────────────── */
+#argira-obra-title {
+  font-family: 'Lora', serif;
+  font-size: clamp(1.1rem, 3vw, 1.4rem);
+  font-weight: 600;
+  color: #f0ece4;
+  line-height: 1.25;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+/* ── Artista ────────────────────────────────────────────── */
+#argira-obra-artist {
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(184, 146, 42, 0.85);
+  margin: -6px 0 0;
+}
+
+/* ── Descripción ────────────────────────────────────────── */
+#argira-obra-desc {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: rgba(232, 225, 210, 0.72);
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 2px solid rgba(184,146,42,0.25);
+  background: rgba(184,146,42,0.04);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Nivel cromático ────────────────────────────────────── */
+#argira-obra-nivel {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(168,158,136,0.55);
+}
+
+/* ── Acciones ───────────────────────────────────────────── */
+#argira-obra-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.argira-modal-btn {
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 11px 16px;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  transition:
+    background 0.14s,
+    color 0.14s,
+    border-color 0.14s,
+    outline-offset 0.1s;
+  border: 1px solid transparent;
+}
+
+.argira-modal-btn:focus-visible {
+  outline: 3px solid rgba(232, 200, 74, 0.9);
+  outline-offset: 3px;
+}
+
+/* Botón primario — Escuchar */
+#argira-obra-listen-btn {
+  background: rgba(184,146,42,0.12);
+  color: rgba(184,146,42,1);
+  border-color: rgba(184,146,42,0.35);
+}
+
+#argira-obra-listen-btn:hover,
+#argira-obra-listen-btn:focus-visible {
+  background: rgba(184,146,42,0.22);
+  border-color: rgba(184,146,42,0.65);
+}
+
+#argira-obra-listen-btn.speaking {
+  background: rgba(184,146,42,0.22);
+  border-color: rgba(184,146,42,0.65);
+  color: #f0ece4;
+}
+
+/* Botón secundario — Cerrar */
+#argira-obra-close-btn {
+  background: transparent;
+  color: rgba(168,158,136,0.7);
+  border-color: rgba(168,158,136,0.2);
+}
+
+#argira-obra-close-btn:hover,
+#argira-obra-close-btn:focus-visible {
+  background: rgba(255,255,255,0.04);
+  color: #f0ece4;
+  border-color: rgba(168,158,136,0.45);
+}
+
+/* ── Botón X esquina superior derecha ───────────────────── */
+#argira-obra-x-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8,8,10,0.7);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
+  cursor: pointer;
+  color: rgba(240,236,228,0.7);
+  font-size: 1rem;
+  line-height: 1;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+
+#argira-obra-x-btn:hover {
+  background: rgba(184,146,42,0.15);
+  color: #f0ece4;
+  border-color: rgba(184,146,42,0.4);
+}
+
+#argira-obra-x-btn:focus-visible {
+  outline: 3px solid rgba(232,200,74,0.9);
+  outline-offset: 2px;
+}
+
+/* ── Indicador visual de doble tap / clic ───────────────── */
+.argira-point-hint {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2000;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid rgba(184,146,42,0.8);
+  transform: translate(-50%, -50%) scale(1);
+  animation: argira-ripple 0.5s ease-out forwards;
+}
+
+@keyframes argira-ripple {
+  0%   { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2);   opacity: 0; }
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  #argira-obra-modal {
+    border-radius: 4px 4px 0 0;
+    max-height: 92dvh;
+  }
+
+  #argira-obra-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  #argira-obra-body {
+    padding: 16px 18px 20px;
+  }
+
+  #argira-obra-img-wrap {
+    max-height: 46vh;
+  }
+
+  #argira-obra-img {
+    max-height: 46vh;
+  }
+
+  .argira-modal-btn {
+    min-width: 100px;
+    font-size: 0.68rem;
+    padding: 10px 12px;
+  }
+}
+
+/* ================================================================
+   BLOQUE 1D — Vista ampliada de imagen ("Zoom")
+   Segundo overlay dedicado, independiente del modal principal.
+   z-index superior a #argira-obra-overlay (9000) para quedar encima.
+   ================================================================ */
+
+/* Botón "Ver imagen ampliada" — mismo lenguaje visual que los
+   demás .argira-modal-btn, variante propia por si se quiere
+   diferenciar en el futuro. */
+#argira-obra-zoom-btn {
+  background: transparent;
+  color: rgba(184, 146, 42, 0.85);
+  border-color: rgba(184, 146, 42, 0.3);
+}
+
+#argira-obra-zoom-btn:hover,
+#argira-obra-zoom-btn:focus-visible {
+  background: rgba(184, 146, 42, 0.12);
+  border-color: rgba(184, 146, 42, 0.55);
+  color: #f0ece4;
+}
+
+/* No mostrar el botón de ampliar si no hay imagen cargada */
+#argira-obra-zoom-btn[hidden] {
+  display: none;
+}
+
+/* ── Overlay de Zoom ─────────────────────────────────────── */
+#argira-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9500; /* por encima de #argira-obra-overlay (9000) */
+  background: rgba(4, 4, 5, 0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+}
+
+#argira-zoom-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Contenedor interno — centra el contenido y actúa como raíz de
+   foco del overlay de zoom. */
+#argira-zoom-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+/* Imagen ampliada — conserva proporción original en cualquier
+   orientación (vertical, horizontal, cuadrada). */
+#argira-zoom-img {
+  max-width: 100%;
+  max-height: 100%;
+  max-height: 100dvh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+/* Botón de cierre del Zoom — esquina superior derecha,
+   tamaño táctil >= 44px según recomendaciones de accesibilidad. */
+#argira-zoom-close-btn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top, 12px));
+  right: max(12px, env(safe-area-inset-right, 12px));
+  z-index: 10;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 8, 10, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  cursor: pointer;
+  color: rgba(240, 236, 228, 0.85);
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+
+#argira-zoom-close-btn:hover {
+  background: rgba(184, 146, 42, 0.2);
+  color: #f0ece4;
+  border-color: rgba(184, 146, 42, 0.5);
+}
+
+#argira-zoom-close-btn:focus-visible {
+  outline: 3px solid rgba(232, 200, 74, 0.9);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  #argira-zoom-close-btn {
+    width: 48px;
+    height: 48px;
+    font-size: 1.3rem;
+  }
+}
